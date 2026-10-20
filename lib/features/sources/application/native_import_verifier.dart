@@ -332,6 +332,7 @@ Future<Map<String, dynamic>> verifyNativeSourceImports({
     'passed': checks.every((item) => item['passed'] == true),
     'checks': checks,
   };
-  JsEngine().dispose();
+  // The CLI writes this report and exits the isolated process. Source settings
+  // still own callable JS handles here, so closing their runtime first is invalid.
   return report;
 }

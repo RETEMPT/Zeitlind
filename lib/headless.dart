@@ -52,9 +52,13 @@ Future<void> runHeadlessMode(List<String> args) async {
       });
       exit(report['passed'] == true ? 0 : 1);
     } catch (e) {
-      await File(
-        reportPath,
-      ).writeAsString(jsonEncode({'passed': false, 'error': e.toString()}));
+      final previous = File(reportPath);
+      final partial = await previous.exists()
+          ? jsonDecode(await previous.readAsString()) as Map<String, dynamic>
+          : <String, dynamic>{};
+      await File(reportPath).writeAsString(
+        jsonEncode({...partial, 'passed': false, 'error': e.toString()}),
+      );
       exit(1);
     }
   }

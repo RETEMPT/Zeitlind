@@ -121,7 +121,7 @@ class ComicSourceManager with ChangeNotifier, Init {
     for (final alias in _aliases.entries) {
       if (find(alias.value) != null) {
         JsEngine().runCode(
-          'ComicSource.sources[${jsonEncode(alias.key)}] = ComicSource.sources[${jsonEncode(alias.value)}];',
+          'void (ComicSource.sources[${jsonEncode(alias.key)}] = ComicSource.sources[${jsonEncode(alias.value)}]);',
         );
       }
     }
@@ -177,10 +177,11 @@ class ComicSourceManager with ChangeNotifier, Init {
         destination: file,
         script: script,
         snapshot: () => JsEngine().runCode(
-          'this.__zeitlindSources = Object.assign({}, ComicSource.sources);',
+          'void (this.__zeitlindSources = Object.assign({}, ComicSource.sources));',
         ),
-        restore: () =>
-            JsEngine().runCode('ComicSource.sources = this.__zeitlindSources;'),
+        restore: () => JsEngine().runCode(
+          'void (ComicSource.sources = this.__zeitlindSources);',
+        ),
         release: () => JsEngine().runCode('delete this.__zeitlindSources;'),
         parse: () async {
           final source = await ComicSourceParser().parse(
@@ -211,7 +212,7 @@ class ComicSourceManager with ChangeNotifier, Init {
         (entry) => entry.value == source.key,
       )) {
         JsEngine().runCode(
-          'ComicSource.sources[${jsonEncode(alias.key)}] = ComicSource.sources[${jsonEncode(source.key)}];',
+          'void (ComicSource.sources[${jsonEncode(alias.key)}] = ComicSource.sources[${jsonEncode(source.key)}]);',
         );
       }
       try {

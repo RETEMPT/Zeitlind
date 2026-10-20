@@ -1,3 +1,9 @@
+/// Native Venera sources inherit an empty optional minimum from ComicSource.
+bool requiresNewerAppVersion(String? minimum, String current) =>
+    minimum != null &&
+    minimum.trim().isNotEmpty &&
+    compareVersions(minimum, current) > 0;
+
 /// Compare numeric releases, prereleases, and legacy source `-hotfix` releases.
 int compareVersions(String left, String right) {
   List<String> parts(String value) {

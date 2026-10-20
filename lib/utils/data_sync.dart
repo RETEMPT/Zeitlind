@@ -1,4 +1,4 @@
-import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart';
 import 'package:zeitlind/components/components.dart';
 import 'package:zeitlind/components/window_frame.dart';
 import 'package:zeitlind/foundation/app.dart';
@@ -23,8 +23,10 @@ class DataSync with ChangeNotifier {
     LocalFavoritesManager().addListener(onDataChanged);
     ComicSourceManager().addListener(onDataChanged);
     if (App.isDesktop) {
-      Future.delayed(const Duration(seconds: 1), () {
-        var controller = WindowFrame.of(App.rootContext);
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        final context = App.rootNavigatorKey.currentContext;
+        if (context == null || !context.mounted) return;
+        var controller = WindowFrame.of(context);
         controller.addCloseListener(_handleWindowClose);
       });
     }
@@ -131,10 +133,10 @@ class DataSync with ChangeNotifier {
         appdata.settings['dataVersion']++;
         await appdata.saveData(false);
         var data = await exportAppData(
-            appdata.settings['disableSyncFields'].toString().isNotEmpty
+          appdata.settings['disableSyncFields'].toString().isNotEmpty,
         );
-        var time =
-            (DateTime.now().millisecondsSinceEpoch ~/ 86400000).toString();
+        var time = (DateTime.now().millisecondsSinceEpoch ~/ 86400000)
+            .toString();
         var filename = time;
         filename += '-';
         filename += appdata.settings['dataVersion'].toString();
@@ -201,8 +203,11 @@ class DataSync with ChangeNotifier {
         if (file == null) {
           throw 'No data file found';
         }
-        var version =
-            file.name!.split('-').elementAtOrNull(1)?.split('.').first;
+        var version = file.name!
+            .split('-')
+            .elementAtOrNull(1)
+            ?.split('.')
+            .first;
         if (version != null && int.tryParse(version) != null) {
           var currentVersion = appdata.settings['dataVersion'];
           if (currentVersion != null && int.parse(version) <= currentVersion) {

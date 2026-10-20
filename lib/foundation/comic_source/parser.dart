@@ -54,7 +54,13 @@ class ComicSourceParser {
     var minAppVersion = JsEngine().runCode("this['temp'].minAppVersion");
     var url = JsEngine().runCode("this['temp'].url");
     if (minAppVersion != null) {
-      if (compareSemVer(minAppVersion, App.version.split('-').first)) {
+      if (minAppVersion is! String) {
+        throw ComicSourceParseException('minAppVersion must be a string');
+      }
+      if (requiresNewerAppVersion(
+        minAppVersion,
+        App.version.split('-').first,
+      )) {
         throw ComicSourceParseException(
           "minAppVersion @version is required".tlParams({
             "version": minAppVersion,
@@ -71,7 +77,7 @@ class ComicSourceParser {
     _checkKeyValidation();
 
     JsEngine().runCode("""
-      ComicSource.sources.$_key = this['temp'];
+      void (ComicSource.sources.$_key = this['temp']);
     """);
 
     var source = ComicSource(
@@ -135,14 +141,14 @@ class ComicSourceParser {
   }
 
   bool _checkExists(String index) {
-    return JsEngine().runCode(
-      "ComicSource.sources.$_key.$index !== null "
-      "&& ComicSource.sources.$_key.$index !== undefined",
-    );
+    return JsEngine().runCode('${_valuePath(index)} != null');
   }
 
+  String _valuePath(String index) =>
+      'ComicSource.sources.$_key?.${index.replaceAll('?.', '.').split('.').join('?.')}';
+
   dynamic _getValue(String index) {
-    return JsEngine().runCode("ComicSource.sources.$_key.$index");
+    return JsEngine().runCode(_valuePath(index));
   }
 
   AccountConfig? _loadAccountConfig() {
@@ -713,6 +719,7 @@ class ComicSourceParser {
   }
 
   LoadComicFunc? _parseLoadComicFunc() {
+    if (!_checkExists('comic.loadInfo')) return null;
     return (id) async {
       try {
         var res = await JsEngine().runCode("""
@@ -730,6 +737,7 @@ class ComicSourceParser {
   }
 
   LoadComicPagesFunc? _parseLoadComicPagesFunc() {
+    if (!_checkExists('comic.loadEp')) return null;
     return (id, ep) async {
       try {
         var res = await JsEngine().runCode("""

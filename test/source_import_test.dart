@@ -143,6 +143,20 @@ void main() {
       throwsFormatException,
     );
   });
+  test('regex quotes and escaped slashes do not hide source declarations', () {
+    final source = SourceScript.parse(r'''
+      const cookie = /document\.cookie\s*=\s*(["'])([\s\S]*?)\1/;
+      const fake = /class Fake extends ComicSource {}/;
+      const ratio = 10 / 2;
+      function parse(value) { return value.replace(/\\([\\"'])/g, "$1"); }
+      class Actual extends ComicSource {}
+    ''');
+    expect(source.className, 'Actual');
+    expect(
+      () => SourceScript.parse(r'/class Fake extends ComicSource {}/;'),
+      throwsFormatException,
+    );
+  });
   test('UTF-8 BOM and Windows UTF-16 files preserve source text', () {
     const text = 'class 中文 {}';
     expect(decodeSourceBytes([239, 187, 191, ...utf8.encode(text)]), text);

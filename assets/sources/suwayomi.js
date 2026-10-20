@@ -60,8 +60,8 @@ class ZeitlindSuwayomi extends ComicSource {
         loadEp: async (id, chapter) => {
             const info = await this.request(`manga/${encodeURIComponent(id)}/chapter/${encodeURIComponent(chapter)}?onlineFetch=true`);
             if (!Number.isInteger(info.pageCount) || info.pageCount < 0) throw "Suwayomi returned no page count";
-            return Array.from({length: info.pageCount}, (_, index) =>
-                `${this.server}/api/v1/manga/${encodeURIComponent(id)}/chapter/${encodeURIComponent(chapter)}/page/${index}`);
+            return {images: Array.from({length: info.pageCount}, (_, index) =>
+                `${this.server}/api/v1/manga/${encodeURIComponent(id)}/chapter/${encodeURIComponent(chapter)}/page/${index}`)};
         },
         onImageLoad: url => new ImageLoadingConfig({url, headers: url.startsWith(`${this.server}/api/`) ? this.headers() : {}}),
         onThumbnailLoad: url => new ImageLoadingConfig({url, headers: url.startsWith(`${this.server}/api/`) ? this.headers() : {}}),
