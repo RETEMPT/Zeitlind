@@ -1,11 +1,7 @@
 import 'package:flutter/material.dart';
 
 class ThemeTuning {
-  const ThemeTuning({
-    this.hue = 150,
-    this.saturation = .26,
-    this.surfaceTint = .12,
-  });
+  const ThemeTuning({this.hue = 0, this.saturation = 0, this.surfaceTint = 0});
   final double hue;
   final double saturation;
   final double surfaceTint;
@@ -20,9 +16,9 @@ class ThemeTuning {
         ? value.toDouble().clamp(0, max)
         : fallback;
     return ThemeTuning(
-      hue: read(hue, 150, 360),
-      saturation: read(saturation, .26, 1),
-      surfaceTint: read(tint, .12, 1),
+      hue: read(hue, 0, 360),
+      saturation: read(saturation, 0, 1),
+      surfaceTint: read(tint, 0, 1),
     );
   }
 

@@ -30,17 +30,9 @@ class ComicSourceParser {
     String? expectedKey,
     bool initialize = true,
   }) async {
-    js = js.replaceAll("\r\n", "\n");
-    var line1 = js
-        .split('\n')
-        .firstWhereOrNull((e) => e.trim().startsWith("class "));
-    if (line1 == null ||
-        !line1.startsWith("class ") ||
-        !line1.contains("extends ComicSource")) {
-      throw ComicSourceParseException("Invalid Content");
-    }
-    var className = line1.split("class")[1].split("extends ComicSource").first;
-    className = className.trim();
+    final script = SourceScript.parse(js);
+    js = script.content;
+    final className = script.className;
     JsEngine().runCode("""(() => { $js
         this['temp'] = new $className()
       }).call()
@@ -121,8 +113,14 @@ class ComicSourceParser {
     await source.loadData();
 
     if (initialize && _checkExists("init")) {
-      Future.delayed(const Duration(milliseconds: 50), () {
-        JsEngine().runCode("ComicSource.sources.$_key.init()");
+      Future.delayed(const Duration(milliseconds: 50), () async {
+        try {
+          await Future.sync(
+            () => JsEngine().runCode("ComicSource.sources.$_key.init()"),
+          ).timeout(const Duration(seconds: 30));
+        } catch (e, s) {
+          Log.error('ComicSource init', e, s);
+        }
       });
     }
 

@@ -1,4 +1,4 @@
-Zeitlind 2.0.0
+Zeitlind 2.1.0
 Modified on 2026-10-20 for an independent Android-first development fork.
 
 This program is derived from Venera 1.6.3:
@@ -17,3 +17,8 @@ https://github.com/EhTagTranslation/Database
 Third-party Flutter dependencies retain their own licenses and notices.
 The community source directory is an external service; its scripts and content
 are supplied by their respective maintainers and are not bundled in this fork.
+
+Curated source-link metadata includes the manga-source-index compilation:
+https://github.com/kuiti/manga-source-index
+Copyright (c) 2026 kuiti, MIT license (assets/sources/INDEX-LICENSE).
+This compilation license does not cover the upstream source scripts.

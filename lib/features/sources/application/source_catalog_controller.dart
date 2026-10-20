@@ -24,6 +24,16 @@ class SourceCatalogController extends ChangeNotifier {
     notifyListeners();
   }
 
+  void setEntries(List<SourceCatalogEntry> value, {String? address}) {
+    if (_disposed) return;
+    _request++;
+    entries = List.unmodifiable(value);
+    loadedAddress = address;
+    status = SourceCatalogStatus.ready;
+    error = null;
+    notifyListeners();
+  }
+
   Future<bool> load(String address) async {
     final request = ++_request;
     status = SourceCatalogStatus.loading;
@@ -39,7 +49,7 @@ class SourceCatalogController extends ChangeNotifier {
       return true;
     } catch (e) {
       if (_disposed || request != _request) return false;
-      error = e.toString();
+      error = e is FormatException ? e.message : e.toString();
       status = SourceCatalogStatus.failed;
       notifyListeners();
       return false;

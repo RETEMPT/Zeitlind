@@ -1,5 +1,6 @@
 import 'package:zeitlind/app/theme.dart';
 import 'package:zeitlind/features/appearance/domain/theme_tuning.dart';
+import 'package:zeitlind/features/sources/application/starter_source_setup.dart';
 import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:desktop_webview_window/desktop_webview_window.dart';
@@ -30,6 +31,9 @@ void main(List<String> args) {
       () async {
         WidgetsFlutterBinding.ensureInitialized();
         LicenseRegistry.addLicense(() async* {
+          yield LicenseEntryWithLineBreaks([
+            'manga-source-index',
+          ], await rootBundle.loadString('assets/sources/INDEX-LICENSE'));
           yield LicenseEntryWithLineBreaks([
             'Zeitlind',
           ], await rootBundle.loadString('NOTICE'));
@@ -84,6 +88,9 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
     WidgetsBinding.instance.addObserver(this);
     checkUpdates();
+    WidgetsBinding.instance.addPostFrameCallback(
+      (_) => starterSourceSetup.configure(),
+    );
     super.initState();
   }
 
@@ -153,13 +160,14 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
       'red' => Colors.red,
       'pink' => Colors.pink,
       'purple' => Colors.purple,
-      'green' => ZeitlindTheme.accent,
+      'monochrome' => ZeitlindTheme.accent,
+      'green' => const Color(0xFF426A5A),
       'custom' => _themeTuning.seed,
       'orange' => Colors.orange,
       'blue' => Colors.blue,
       'yellow' => Colors.yellow,
       'cyan' => Colors.cyan,
-      _ => Colors.blue,
+      _ => ZeitlindTheme.accent,
     };
   }
 
@@ -192,6 +200,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     }
     return ZeitlindTheme.create(
       primary: primary,
+      monochrome: appdata.settings['color'] == 'monochrome',
       brightness: brightness,
       tuning: _themeTuning,
       fontFamily: font,

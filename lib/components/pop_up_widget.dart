@@ -1,9 +1,10 @@
 part of 'components.dart';
 
 class PopUpWidget<T> extends PopupRoute<T> {
-  PopUpWidget(this.widget);
+  PopUpWidget(this.widget, {this.maxWidth = 500});
 
   final Widget widget;
+  final double maxWidth;
 
   @override
   Color? get barrierColor => Colors.black54;
@@ -39,7 +40,9 @@ class PopUpWidget<T> extends PopupRoute<T> {
               )
             : null,
         clipBehavior: showPopUp ? Clip.antiAlias : Clip.none,
-        width: showPopUp ? 500 : double.infinity,
+        width: showPopUp
+            ? math.min(maxWidth, MediaQuery.sizeOf(context).width - 48)
+            : double.infinity,
         height: showPopUp ? height : double.infinity,
         child: ClipRect(
           child: Navigator(
@@ -98,11 +101,15 @@ class PopupIndicatorWidget extends InheritedWidget {
   }
 }
 
-Future<T> showPopUpWidget<T>(BuildContext context, Widget widget) async {
+Future<T> showPopUpWidget<T>(
+  BuildContext context,
+  Widget widget, {
+  double maxWidth = 500,
+}) async {
   return await Navigator.of(
     context,
     rootNavigator: true,
-  ).push(PopUpWidget(widget));
+  ).push(PopUpWidget(widget, maxWidth: maxWidth));
 }
 
 class PopUpWidgetScaffold extends StatefulWidget {

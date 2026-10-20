@@ -77,6 +77,18 @@ Future<void> init() async {
 }
 
 void _checkOldConfigs() {
+  if (appdata.implicitData['neutralPaletteMigration'] != true) {
+    if (appdata.settings['color'] == 'green' &&
+        appdata.settings['customThemeHue'] == 150.0 &&
+        appdata.settings['customThemeSaturation'] == .26 &&
+        appdata.settings['themeSurfaceTint'] == .12) {
+      appdata.settings['color'] = 'monochrome';
+      appdata.settings['themeSurfaceTint'] = 0.0;
+      appdata.saveData();
+    }
+    appdata.implicitData['neutralPaletteMigration'] = true;
+    appdata.writeImplicitData();
+  }
   if (appdata.settings['searchSources'] == null) {
     appdata.settings['searchSources'] = ComicSource.all()
         .where((e) => e.searchPageData != null)

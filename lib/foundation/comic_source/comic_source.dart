@@ -3,6 +3,8 @@ library;
 import 'dart:async';
 import 'package:zeitlind/core/version.dart';
 import 'package:zeitlind/features/sources/data/source_install_transaction.dart';
+import 'package:zeitlind/features/sources/domain/source_script.dart';
+import 'package:zeitlind/features/sources/domain/source_identity.dart';
 import 'dart:collection';
 import 'dart:convert';
 import 'dart:math' as math;
@@ -36,6 +38,7 @@ part 'types.dart';
 
 class ComicSourceManager with ChangeNotifier, Init {
   final List<ComicSource> _sources = [];
+  final Map<String, String> _aliases = {};
 
   static ComicSourceManager? _instance;
 
@@ -45,11 +48,27 @@ class ComicSourceManager with ChangeNotifier, Init {
 
   List<ComicSource> all() => List.from(_sources);
 
-  ComicSource? find(String key) =>
-      _sources.firstWhereOrNull((element) => element.key == key);
+  ComicSource? find(String key) => _sources.firstWhereOrNull(
+    (element) => element.key == key || element.key == _aliases[key],
+  );
 
   ComicSource? fromIntKey(int key) =>
-      _sources.firstWhereOrNull((element) => element.key.hashCode == key);
+      _sources.firstWhereOrNull((element) => element.key.hashCode == key) ??
+      find(
+        _aliases.keys.toList().firstWhereOrNull(
+              (alias) => alias.hashCode == key,
+            ) ??
+            '',
+      );
+
+  ComicSource? findWebsite(String identity) =>
+      _sources.firstWhereOrNull((source) => source.websiteIdentity == identity);
+
+  Future<void> _saveAliases() async {
+    await File(
+      '${App.dataPath}/comic_source/aliases.json',
+    ).writeAsString(jsonEncode(_aliases));
+  }
 
   @override
   @protected
@@ -60,23 +79,57 @@ class ComicSourceManager with ChangeNotifier, Init {
       Directory(path).create();
       return;
     }
-    await for (var entity in Directory(path).list()) {
+    final aliasFile = File('$path/aliases.json');
+    if (await aliasFile.exists()) {
+      try {
+        _aliases.addAll(
+          Map<String, String>.from(jsonDecode(await aliasFile.readAsString())),
+        );
+      } catch (e) {
+        Log.error('Source aliases', e);
+      }
+    }
+    final files = await Directory(path).list().toList();
+    files.sort((a, b) => a.path.compareTo(b.path));
+    for (var entity in files) {
       if (entity is File && entity.path.endsWith(".js")) {
         try {
+          final content = await entity.readAsString();
           var source = await ComicSourceParser().parse(
-            await entity.readAsString(),
+            content,
             entity.absolute.path,
+            initialize: false,
           );
+          source.data.putIfAbsent(
+            '_zeitlindWebsite',
+            () => sourceWebsiteIdentity(source.key, scriptWebsite(content)),
+          );
+          final existing = findWebsite(source.websiteIdentity);
+          if (existing != null) {
+            _aliases[source.key] = existing.key;
+            await entity.rename('${entity.path}.duplicate');
+            await _saveAliases();
+            continue;
+          }
           _sources.add(source);
+          unawaited(_initializeSource(source));
         } catch (e, s) {
           Log.error("ComicSource", "$e\n$s");
         }
+      }
+    }
+    for (final alias in _aliases.entries) {
+      if (find(alias.value) != null) {
+        JsEngine().runCode(
+          'ComicSource.sources[${jsonEncode(alias.key)}] = ComicSource.sources[${jsonEncode(alias.value)}];',
+        );
       }
     }
   }
 
   Future reload() async {
     _sources.clear();
+    _aliases.clear();
     JsEngine().runCode("ComicSource.sources = {};");
     await doInit();
     notifyListeners();
@@ -91,6 +144,8 @@ class ComicSourceManager with ChangeNotifier, Init {
     String fileName, {
     String? expectedKey,
     ComicSource? replacing,
+    bool initialize = true,
+    String? websiteIdentity,
   }) {
     final result = _mutation.then((_) async {
       if (replacing != null && find(replacing.key) != replacing) {
@@ -127,27 +182,53 @@ class ComicSourceManager with ChangeNotifier, Init {
         restore: () =>
             JsEngine().runCode('ComicSource.sources = this.__zeitlindSources;'),
         release: () => JsEngine().runCode('delete this.__zeitlindSources;'),
-        parse: () => ComicSourceParser().parse(
-          script,
-          file.path,
-          replacingKey: replacing?.key,
-          expectedKey: expectedKey ?? replacing?.key,
-          initialize: false,
-        ),
+        parse: () async {
+          final source = await ComicSourceParser().parse(
+            script,
+            file.path,
+            replacingKey: replacing?.key,
+            expectedKey: expectedKey ?? replacing?.key,
+            initialize: false,
+          );
+          source.data['_zeitlindWebsite'] =
+              websiteIdentity ??
+              source.data['_zeitlindWebsite'] ??
+              sourceWebsiteIdentity(source.key, scriptWebsite(script));
+          final existing = findWebsite(source.websiteIdentity);
+          if (existing != null && existing.key != source.key) {
+            throw const FormatException(
+              'A source for this website is already installed',
+            );
+          }
+          return source;
+        },
       );
       if (replacing != null) _sources.remove(replacing);
       _sources.add(source);
+      try {
+        await source.saveData();
+      } catch (e, s) {
+        Log.error('Source metadata', e, s);
+      }
       _availableUpdates.remove(source.key);
       notifyListeners();
-      try {
-        JsEngine().runCode('ComicSource.sources.${source.key}.init?.();');
-      } catch (e, s) {
-        Log.error('ComicSource init', e, s);
+      if (initialize) {
+        await _initializeSource(source);
       }
       return source;
     });
     _mutation = result.then<void>((_) {}, onError: (Object e, StackTrace s) {});
     return result;
+  }
+
+  Future<void> _initializeSource(ComicSource source) async {
+    try {
+      await Future.sync(
+        () => JsEngine().runCode('ComicSource.sources.${source.key}.init?.();'),
+      ).timeout(const Duration(seconds: 30));
+    } catch (e, s) {
+      Log.error('ComicSource init', e, s);
+    }
   }
 
   void add(ComicSource source) {
@@ -158,6 +239,19 @@ class ComicSourceManager with ChangeNotifier, Init {
   void remove(String key) {
     _sources.removeWhere((element) => element.key == key);
     _availableUpdates.remove(key);
+    final aliases = _aliases.entries
+        .where((entry) => entry.value == key)
+        .map((entry) => entry.key)
+        .toList();
+    for (final alias in aliases) {
+      _aliases.remove(alias);
+      JsEngine().runCode('delete ComicSource.sources[${jsonEncode(alias)}];');
+    }
+    unawaited(
+      _saveAliases().catchError((Object error) {
+        Log.error('Source aliases', error);
+      }),
+    );
     if (RegExp(r'^[a-zA-Z0-9_]+$').hasMatch(key)) {
       JsEngine().runCode('delete ComicSource.sources.$key;');
     }
@@ -183,6 +277,9 @@ class ComicSourceManager with ChangeNotifier, Init {
 }
 
 class ComicSource {
+  String get websiteIdentity => data['_zeitlindWebsite'] is String
+      ? data['_zeitlindWebsite'] as String
+      : sourceWebsiteIdentity(key);
   static List<ComicSource> all() => ComicSourceManager().all();
 
   static ComicSource? find(String key) => ComicSourceManager().find(key);
@@ -296,12 +393,15 @@ class ComicSource {
       _haveWaitingTask = false;
     }
     _isSaving = true;
-    var file = File("${App.dataPath}/comic_source/$key.data");
-    if (!await file.exists()) {
-      await file.create(recursive: true);
+    try {
+      var file = File("${App.dataPath}/comic_source/$key.data");
+      if (!await file.exists()) {
+        await file.create(recursive: true);
+      }
+      await file.writeAsString(jsonEncode(data));
+    } finally {
+      _isSaving = false;
     }
-    await file.writeAsString(jsonEncode(data));
-    _isSaving = false;
     DataSync().uploadData();
   }
 

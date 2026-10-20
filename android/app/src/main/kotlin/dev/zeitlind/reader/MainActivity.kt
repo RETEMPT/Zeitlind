@@ -5,6 +5,9 @@ import android.app.Activity
 import android.content.ContentResolver
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.content.pm.ShortcutInfo
+import android.content.pm.ShortcutManager
+import android.graphics.drawable.Icon
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -109,6 +112,29 @@ class MainActivity : FlutterFragmentActivity() {
             "zeitlind/method_channel"
         ).setMethodCallHandler { call, res ->
             when (call.method) {
+                "requestLauncherShortcut" -> {
+                    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
+                        res.success("unsupported")
+                    } else {
+                        val manager = getSystemService(ShortcutManager::class.java)
+                        if (manager == null || !manager.isRequestPinShortcutSupported) {
+                            res.success("unsupported")
+                        } else if (manager.pinnedShortcuts.any { it.id == "zeitlind.home" }) {
+                            res.success("alreadyAdded")
+                        } else {
+                            val launchIntent = Intent(this, MainActivity::class.java)
+                                .setAction(Intent.ACTION_MAIN)
+                                .addCategory(Intent.CATEGORY_LAUNCHER)
+                            val shortcut = ShortcutInfo.Builder(this, "zeitlind.home")
+                                .setShortLabel("Zeitlind")
+                                .setLongLabel("Zeitlind")
+                                .setIcon(Icon.createWithResource(this, R.mipmap.ic_launcher))
+                                .setIntent(launchIntent)
+                                .build()
+                            res.success(if (manager.requestPinShortcut(shortcut, null)) "requested" else "unsupported")
+                        }
+                    }
+                }
                 "getProxy" -> res.success(getProxy())
                 "setScreenOn" -> {
                     val set = call.argument<Boolean>("set") ?: false

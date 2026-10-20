@@ -1,7 +1,6 @@
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
-import 'package:path_provider/path_provider.dart';
 import 'package:uuid/uuid.dart';
 import 'package:zeitlind/foundation/app.dart';
 import 'package:zeitlind/foundation/log.dart';
@@ -115,7 +114,7 @@ class Appdata with Init {
 
   var implicitData = <String, dynamic>{};
 
-  void writeImplicitData() async {
+  Future<void> writeImplicitData() async {
     while (_isSavingData) {
       await Future.delayed(const Duration(milliseconds: 20));
     }
@@ -130,7 +129,7 @@ class Appdata with Init {
 
   @override
   Future<void> doInit() async {
-    var dataPath = (await getApplicationSupportDirectory()).path;
+    var dataPath = App.dataPath;
     var file = File(FilePath.join(dataPath, 'appdata.json'));
     if (!await file.exists()) {
       return;
@@ -174,10 +173,10 @@ class Settings with ChangeNotifier {
   final _data = <String, dynamic>{
     'comicDisplayMode': 'detailed', // detailed, brief
     'comicTileScale': 1.00, // 0.75-1.25
-    'color': 'green', // system, custom, red, pink, purple, green, orange, blue
-    'customThemeHue': 150.0,
-    'customThemeSaturation': .26,
-    'themeSurfaceTint': .12,
+    'color': 'monochrome', // monochrome, system, custom, or a named palette
+    'customThemeHue': 0.0,
+    'customThemeSaturation': 0.0,
+    'themeSurfaceTint': 0.0,
     'theme_mode': 'system', // light, dark, system
     'newFavoriteAddTo': 'end', // start, end
     'moveFavoriteAfterRead': 'none', // none, end, start
@@ -221,6 +220,11 @@ class Settings with ChangeNotifier {
     'sni': true,
     'autoAddLanguageFilter': 'none', // none, chinese, english, japanese
     'comicSourceListUrl': _defaultSourceListUrl,
+    'comicSourceRepositories': <String>[
+      'https://cdn.jsdelivr.net/gh/venera-app/venera-configs@main/index.json',
+      'https://cdn.jsdelivr.net/gh/kuiti/manga-source-index@main/05-venera-sources/tier1/index.json',
+      'https://cdn.jsdelivr.net/gh/kuiti/manga-source-index@main/05-venera-sources/all/index.json',
+    ],
     'preloadImageCount': 4,
     'followUpdatesFolder': null,
     'initialPage': '0',

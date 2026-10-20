@@ -81,8 +81,16 @@ class _App {
   }
 
   Future<void> init() async {
-    cachePath = (await getApplicationCacheDirectory()).path;
-    dataPath = (await getApplicationSupportDirectory()).path;
+    final override = Platform.environment['ZEITLIND_DATA_DIR'];
+    if (override != null && override.trim().isNotEmpty) {
+      dataPath = Directory(override).absolute.path;
+      cachePath = '$dataPath/cache';
+      await Directory(dataPath).create(recursive: true);
+      await Directory(cachePath).create(recursive: true);
+    } else {
+      cachePath = (await getApplicationCacheDirectory()).path;
+      dataPath = (await getApplicationSupportDirectory()).path;
+    }
     if (isAndroid) {
       externalStoragePath = (await getExternalStorageDirectory())!.path;
     }

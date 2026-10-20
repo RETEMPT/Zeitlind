@@ -31,8 +31,8 @@ char* wideCharToMultiByte(wchar_t* pWCStrKey)
 }
 
 char* getProxy() {
-    _WINHTTP_CURRENT_USER_IE_PROXY_CONFIG net;
-    WinHttpGetIEProxyConfigForCurrentUser(&net);
+    _WINHTTP_CURRENT_USER_IE_PROXY_CONFIG net{};
+    if (!WinHttpGetIEProxyConfigForCurrentUser(&net)) return nullptr;
     if (net.lpszProxy == nullptr) {
         GlobalFree(net.lpszAutoConfigUrl);
         GlobalFree(net.lpszProxyBypass);
@@ -97,7 +97,7 @@ bool FlutterWindow::OnCreate() {
           }
         else
           result->Success(flutter::EncodableValue("No Proxy"));
-        delete(res);
+        delete[] res;
         return;
       }
 #ifdef NDEBUG

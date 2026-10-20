@@ -8,6 +8,8 @@ import '../application/source_catalog_controller.dart';
 import '../data/source_catalog_repository.dart';
 import '../data/source_transport.dart';
 import '../domain/source_catalog.dart';
+import 'package:zeitlind/core/version.dart';
+import 'source_import_error.dart';
 
 class SourceCatalogView extends StatefulWidget {
   const SourceCatalogView({
@@ -15,11 +17,15 @@ class SourceCatalogView extends StatefulWidget {
     required this.onInstall,
     this.repository,
     this.onDirectoryLoaded,
+    this.initialAddress,
+    this.initialEntries,
   });
 
   final Future<void> Function(SourceCatalogEntry entry) onInstall;
   final SourceCatalogRepository? repository;
   final Future<void> Function(String address)? onDirectoryLoaded;
+  final String? initialAddress;
+  final List<SourceCatalogEntry>? initialEntries;
 
   @override
   State<SourceCatalogView> createState() => _SourceCatalogViewState();
@@ -30,26 +36,64 @@ class _SourceCatalogViewState extends State<SourceCatalogView> {
     widget.repository ?? const SourceCatalogRepository(loadSourceText),
   );
   late final address = TextEditingController(
-    text: appdata.settings['comicSourceListUrl'],
+    text:
+        widget.initialAddress ??
+        (widget.initialEntries == null
+            ? appdata.settings['comicSourceListUrl']
+            : ''),
   );
   String? installing;
   String? installError;
   int filter = 0;
+  ComicSource? installedSource(SourceCatalogEntry entry) =>
+      ComicSource.find(entry.key) ??
+      ComicSourceManager().findWebsite(entry.websiteIdentity);
+  bool isCurrent(SourceCatalogEntry entry) {
+    final source = installedSource(entry);
+    return source != null &&
+        (source.key != entry.key ||
+            compareVersions(entry.version, source.version) <= 0);
+  }
 
   @override
   void initState() {
     super.initState();
-    load();
+    if (widget.initialEntries != null) {
+      catalog.setEntries(
+        widget.initialEntries!,
+        address: widget.initialAddress,
+      );
+      if (widget.initialAddress != null) {
+        rememberDirectory(widget.initialAddress!);
+      }
+    } else {
+      load();
+    }
+  }
+
+  Future<void> rememberDirectory(String value) async {
+    if (widget.onDirectoryLoaded != null) {
+      await widget.onDirectoryLoaded!(value);
+      return;
+    }
+    appdata.settings['comicSourceListUrl'] = value;
+    final saved = (appdata.settings['comicSourceRepositories'] as List)
+        .whereType<String>()
+        .toList();
+    saved.remove(value);
+    saved.insert(0, value);
+    appdata.settings['comicSourceRepositories'] = saved.take(12).toList();
+    try {
+      await appdata.saveData();
+    } catch (e) {
+      if (mounted) setState(() => installError = sourceImportError(e));
+    }
   }
 
   Future<void> load() async {
     if (await catalog.load(address.text)) {
-      if (widget.onDirectoryLoaded != null) {
-        await widget.onDirectoryLoaded!(catalog.loadedAddress!);
-        return;
-      }
-      appdata.settings['comicSourceListUrl'] = catalog.loadedAddress;
-      await appdata.saveData();
+      await rememberDirectory(catalog.loadedAddress!);
+      if (mounted) setState(() {});
     }
   }
 
@@ -68,7 +112,7 @@ class _SourceCatalogViewState extends State<SourceCatalogView> {
     try {
       await widget.onInstall(entry);
     } catch (e) {
-      if (mounted) setState(() => installError = e.toString());
+      if (mounted) setState(() => installError = sourceImportError(e));
     } finally {
       if (mounted) setState(() => installing = null);
     }
@@ -84,12 +128,13 @@ class _SourceCatalogViewState extends State<SourceCatalogView> {
           final entries = catalog.filtered
               .where(
                 (entry) => switch (filter) {
-                  1 => ComicSource.find(entry.key) == null,
+                  1 => installedSource(entry) == null,
                   2 => const {
                     'komga',
                     'kavita',
                     'lanraragi',
                   }.contains(entry.key),
+                  3 => installedSource(entry) != null,
                   _ => true,
                 },
               )
@@ -98,16 +143,6 @@ class _SourceCatalogViewState extends State<SourceCatalogView> {
           return ListView(
             padding: const EdgeInsets.all(16),
             children: [
-              Text(
-                'Find your next story'.tl,
-                style: Theme.of(context).textTheme.headlineSmall,
-              ),
-              const SizedBox(height: 8),
-              Text(
-                'Browse community sources or connect your own library. Scripts run only after you install them.'
-                    .tl,
-              ),
-              const SizedBox(height: 16),
               TextField(
                 controller: address,
                 keyboardType: TextInputType.url,
@@ -134,6 +169,30 @@ class _SourceCatalogViewState extends State<SourceCatalogView> {
                       load();
                     },
                   ),
+                  if ((appdata.settings['comicSourceRepositories'] as List)
+                      .isNotEmpty)
+                    PopupMenuButton<String>(
+                      tooltip: 'Saved repositories'.tl,
+                      icon: const Icon(Icons.history),
+                      onSelected: (value) {
+                        address.text = value;
+                        load();
+                      },
+                      itemBuilder: (_) =>
+                          (appdata.settings['comicSourceRepositories'] as List)
+                              .whereType<String>()
+                              .map(
+                                (value) => PopupMenuItem(
+                                  value: value,
+                                  child: Text(
+                                    value,
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                              )
+                              .toList(),
+                    ),
                   ActionChip(
                     label: Text('GitHub direct'.tl),
                     onPressed: () {
@@ -160,6 +219,7 @@ class _SourceCatalogViewState extends State<SourceCatalogView> {
                     (0, 'All'),
                     (1, 'Not installed'),
                     (2, 'Self-hosted'),
+                    (3, 'Installed'),
                   ])
                     ChoiceChip(
                       label: Text(label.tl),
@@ -172,7 +232,7 @@ class _SourceCatalogViewState extends State<SourceCatalogView> {
               if (loading) const LinearProgressIndicator(),
               if (catalog.error != null) ...[
                 Text(
-                  catalog.error!,
+                  catalog.error!.tl,
                   style: TextStyle(color: context.colorScheme.error),
                 ),
                 TextButton.icon(
@@ -196,53 +256,76 @@ class _SourceCatalogViewState extends State<SourceCatalogView> {
                     textAlign: TextAlign.center,
                   ),
                 ),
-              for (final entry in entries)
-                Card.outlined(
-                  margin: const EdgeInsets.only(bottom: 8),
-                  child: Padding(
-                    padding: const EdgeInsets.all(12),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          entry.name,
-                          style: Theme.of(context).textTheme.titleMedium,
-                        ),
-                        Text(
-                          '${entry.version} · ${entry.scriptUri.host}',
-                          style: Theme.of(context).textTheme.bodySmall,
-                        ),
-                        if (entry.description.isNotEmpty) ...[
-                          const SizedBox(height: 8),
-                          Text(entry.description),
-                        ],
-                        const SizedBox(height: 8),
-                        Align(
-                          alignment: Alignment.centerRight,
-                          child: ComicSource.find(entry.key) != null
-                              ? Chip(
-                                  avatar: const Icon(Icons.check, size: 18),
-                                  label: Text('Installed'.tl),
-                                )
-                              : FilledButton.tonalIcon(
-                                  onPressed: installing == null
-                                      ? () => install(entry)
-                                      : null,
-                                  icon: installing == entry.key
-                                      ? const SizedBox.square(
-                                          dimension: 18,
-                                          child: CircularProgressIndicator(
-                                            strokeWidth: 2,
-                                          ),
-                                        )
-                                      : const Icon(Icons.add),
-                                  label: Text('Add'.tl),
+              LayoutBuilder(
+                builder: (context, constraints) => Wrap(
+                  spacing: 12,
+                  children: [
+                    for (final entry in entries)
+                      SizedBox(
+                        width: constraints.maxWidth >= 720
+                            ? (constraints.maxWidth - 12) / 2
+                            : constraints.maxWidth,
+                        child: Card.outlined(
+                          margin: const EdgeInsets.only(bottom: 8),
+                          child: Padding(
+                            padding: const EdgeInsets.all(12),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  entry.name,
+                                  style: Theme.of(
+                                    context,
+                                  ).textTheme.titleMedium,
                                 ),
+                                Text(
+                                  '${entry.version} · ${entry.scriptUri.host}',
+                                  style: Theme.of(context).textTheme.bodySmall,
+                                ),
+                                if (entry.description.isNotEmpty) ...[
+                                  const SizedBox(height: 8),
+                                  Text(entry.description),
+                                ],
+                                const SizedBox(height: 8),
+                                Align(
+                                  alignment: Alignment.centerRight,
+                                  child: isCurrent(entry)
+                                      ? Chip(
+                                          avatar: const Icon(
+                                            Icons.check,
+                                            size: 18,
+                                          ),
+                                          label: Text('Installed'.tl),
+                                        )
+                                      : FilledButton.tonalIcon(
+                                          onPressed: installing == null
+                                              ? () => install(entry)
+                                              : null,
+                                          icon: installing == entry.key
+                                              ? const SizedBox.square(
+                                                  dimension: 18,
+                                                  child:
+                                                      CircularProgressIndicator(
+                                                        strokeWidth: 2,
+                                                      ),
+                                                )
+                                              : const Icon(Icons.add),
+                                          label: Text(
+                                            (ComicSource.find(entry.key) == null
+                                                    ? 'Add'
+                                                    : 'Update')
+                                                .tl,
+                                          ),
+                                        ),
+                                ),
+                              ],
+                            ),
+                          ),
                         ),
-                      ],
-                    ),
-                  ),
+                      ),
+                  ],
                 ),
+              ),
               const SizedBox(height: 24),
             ],
           );

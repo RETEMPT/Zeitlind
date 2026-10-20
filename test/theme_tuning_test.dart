@@ -4,10 +4,27 @@ import 'package:zeitlind/app/theme.dart';
 import 'package:zeitlind/features/appearance/domain/theme_tuning.dart';
 
 void main() {
+  test('default light and dark palettes contain no green tint', () {
+    for (final brightness in Brightness.values) {
+      final colors = ZeitlindTheme.create(brightness: brightness).colorScheme;
+      for (final color in [
+        colors.primary,
+        colors.onPrimary,
+        colors.primaryContainer,
+        colors.secondary,
+        colors.surface,
+        colors.surfaceContainerHigh,
+        colors.onSurface,
+      ]) {
+        expect(color.r, closeTo(color.g, 1 / 255));
+        expect(color.g, closeTo(color.b, 1 / 255));
+      }
+    }
+  });
   test('invalid imported theme values safely fall back or clamp', () {
     final tuning = ThemeTuning.fromValues(double.nan, 'bad', 9);
-    expect(tuning.hue, 150);
-    expect(tuning.saturation, .26);
+    expect(tuning.hue, 0);
+    expect(tuning.saturation, 0);
     expect(tuning.surfaceTint, 1);
   });
   test('background tint changes surfaces independently of the accent', () {

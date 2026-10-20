@@ -42,11 +42,8 @@ void main() {
     }
   });
 
-  test('rejects duplicates and executable or local URL schemes', () {
-    expect(
-      () => parseSourceCatalog(jsonEncode([entry, entry]), uri),
-      throwsFormatException,
-    );
+  test('merges duplicates and rejects executable or local URL schemes', () {
+    expect(parseSourceCatalog(jsonEncode([entry, entry]), uri).length, 1);
     for (final value in [
       'file:///private/source.js',
       'javascript:alert(1)',

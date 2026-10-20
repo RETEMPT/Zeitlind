@@ -1,4 +1,5 @@
 import 'source_catalog.dart';
+import 'source_script.dart';
 
 class SourceTextResponse {
   const SourceTextResponse(this.content, this.uri);
@@ -52,11 +53,17 @@ class SourceDiagnostics {
           resolvedUri: uri,
         );
     try {
+      if (target.url.trim().isEmpty) {
+        return result(
+          SourceHealth.warning,
+          'Local or bridged source has no remote script update URL',
+        );
+      }
       final uri = sourceHttpUri(target.url);
       final response = await loader(uri).timeout(const Duration(seconds: 45));
-      if (!RegExp(
-        r'class\s+\w+\s+extends\s+ComicSource',
-      ).hasMatch(response.content)) {
+      try {
+        SourceScript.parse(response.content);
+      } on FormatException {
         return result(
           SourceHealth.failed,
           'The link did not return a comic source script',

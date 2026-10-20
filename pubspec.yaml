@@ -2,7 +2,7 @@ name: zeitlind
 description: "Zeitlind — your library, your pace."
 publish_to: 'none'
 
-version: 2.0.0+200
+version: 2.1.0+210
 
 environment:
   sdk: '>=3.8.0 <4.0.0'
@@ -103,6 +103,8 @@ flutter:
     - assets/translation.json
     - assets/init.js
     - assets/app_icon.png
+    - assets/sources/suwayomi.js
+    - assets/sources/INDEX-LICENSE
     - assets/tags.json
     - assets/tags_tw.json
     - assets/opencc.txt

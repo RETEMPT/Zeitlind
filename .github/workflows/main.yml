@@ -6,7 +6,7 @@ on:
       tag:
         description: Release tag matching pubspec.yaml
         required: true
-        default: v2.0.0
+        default: v2.1.0
 
 permissions:
   contents: read
@@ -72,6 +72,8 @@ jobs:
             "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose --print-certs "$apk"
             "$ANDROID_HOME/build-tools/36.0.0/aapt" dump badging "$apk" > "$RUNNER_TEMP/zeitlind-badging.txt"
             grep -q "package: name='dev.zeitlind.reader'" "$RUNNER_TEMP/zeitlind-badging.txt"
+            grep -q "launchable-activity: name='dev.zeitlind.reader.MainActivity'" "$RUNNER_TEMP/zeitlind-badging.txt"
+            grep -q "application-icon" "$RUNNER_TEMP/zeitlind-badging.txt"
             cp "$apk" dist/
           done
           keytool -exportcert -rfc -keystore "$RUNNER_TEMP/zeitlind-signing/zeitlind-release.p12" \
@@ -88,3 +90,33 @@ jobs:
         if: always()
         run: |
           rm -f android/key.properties "$RUNNER_TEMP/zeitlind-signing/zeitlind-release.p12"
+
+  launcher-smoke:
+    needs: build
+    runs-on: ubuntu-22.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: Zeitlind-${{ inputs.tag }}-android
+          path: dist/
+      - name: Enable emulator acceleration
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          arch: x86_64
+          target: default
+          profile: pixel_2
+          disable-animations: true
+          script: bash scripts/android_smoke.sh
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: Android-launcher-verification
+          path: smoke/
+          if-no-files-found: warn

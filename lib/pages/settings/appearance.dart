@@ -45,6 +45,7 @@ class _AppearanceSettingsState extends State<AppearanceSettings> {
           title: "Theme Color".tl,
           settingKey: "color",
           optionTranslation: {
+            "monochrome": "Black and white".tl,
             "system": "System".tl,
             "red": "Red".tl,
             "pink": "Pink".tl,
@@ -64,10 +65,38 @@ class _AppearanceSettingsState extends State<AppearanceSettings> {
           onCommit: commit,
         ).toSliver(),
         TextButton.icon(
-          onPressed: () => commit(const ThemeTuning(), true),
+          onPressed: () {
+            appdata.settings['color'] = 'monochrome';
+            commit(const ThemeTuning(), false);
+          },
           icon: const Icon(Icons.restart_alt),
           label: Text('Reset theme'.tl),
         ).toSliver(),
+        if (App.isAndroid)
+          ListTile(
+            leading: const Icon(Icons.add_to_home_screen),
+            title: Text('Add to home screen'.tl),
+            onTap: () async {
+              try {
+                final result = await const MethodChannel(
+                  'zeitlind/method_channel',
+                ).invokeMethod<String>('requestLauncherShortcut');
+                if (!context.mounted) return;
+                context.showMessage(
+                  message: switch (result) {
+                    'requested' => 'Confirm the shortcut in your launcher'.tl,
+                    'alreadyAdded' =>
+                      'The home screen shortcut already exists'.tl,
+                    _ =>
+                      'Your launcher does not support pinning. Find Zeitlind in the app drawer'
+                          .tl,
+                  },
+                );
+              } catch (e) {
+                if (context.mounted) context.showMessage(message: e.toString());
+              }
+            },
+          ).toSliver(),
         SliverPadding(
           padding: EdgeInsets.only(bottom: context.padding.bottom + 16),
         ),

@@ -1,0 +1,56 @@
+name: Windows release build
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: windows-2022
+    timeout-minutes: 65
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version-file: pubspec.yaml
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      - run: flutter analyze --fatal-infos
+      - run: flutter test --reporter expanded
+      - name: Build Windows application
+        run: >-
+          flutter build windows --release
+          --dart-define=ZEITLIND_REPOSITORY=https://github.com/${{ github.repository }}
+          --dart-define=ZEITLIND_UPDATE_MANIFEST=https://raw.githubusercontent.com/${{ github.repository }}/main/pubspec.yaml
+          --dart-define=ZEITLIND_RELEASES=https://github.com/${{ github.repository }}/releases/latest
+      - name: Verify imports in the native Windows executable
+        shell: pwsh
+        run: |
+          $report = Join-Path $env:RUNNER_TEMP 'windows-source-import.json'
+          $executable = (Resolve-Path 'build/windows/x64/runner/Release/zeitlind.exe').Path
+          $process = Start-Process -FilePath $executable -ArgumentList @('--headless', 'verify-imports', $report) -WindowStyle Hidden -PassThru -Wait
+          if (-not (Test-Path -LiteralPath $report)) { throw 'Native application exited without an import report' }
+          $result = Get-Content -LiteralPath $report -Raw | ConvertFrom-Json
+          $result | ConvertTo-Json -Depth 12
+          if ($process.ExitCode -ne 0 -or -not $result.passed) { throw 'Native source verification failed' }
+      - name: Package Windows portable build
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Path dist -Force | Out-Null
+          $version = (Select-String -Path pubspec.yaml -Pattern '^version:\s*([^+]+)').Matches.Groups[1].Value.Trim()
+          $archive = "zeitlind-$version-windows-x64.zip"
+          Compress-Archive -Path 'build/windows/x64/runner/Release/*' -DestinationPath "dist/$archive"
+          $digest = (Get-FileHash "dist/$archive" -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$digest  $archive" | Set-Content 'dist/SHA256SUMS-windows' -Encoding ascii
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Zeitlind-windows-x64
+          path: dist/
+          retention-days: 14
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: Windows-source-import-verification
+          path: ${{ runner.temp }}/windows-source-import.json
+          if-no-files-found: warn

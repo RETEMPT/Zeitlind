@@ -2,21 +2,23 @@ import 'package:flutter/material.dart';
 import 'package:zeitlind/features/appearance/domain/theme_tuning.dart';
 
 abstract final class ZeitlindTheme {
-  static const accent = Color(0xFF426A5A);
+  static const accent = Color(0xFF202020);
 
   static ThemeData create({
     Brightness brightness = Brightness.light,
     Color primary = accent,
+    bool? monochrome,
     ThemeTuning tuning = const ThemeTuning(),
     String? fontFamily,
     List<String>? fontFamilyFallback,
   }) {
     final dark = brightness == Brightness.dark;
-    final neutral = dark ? const Color(0xFF171A18) : const Color(0xFFFAF9F6);
+    final neutral = dark ? const Color(0xFF151515) : const Color(0xFFFAFAFA);
+    final neutralAccent = monochrome ?? primary == accent;
     Color surface(double amount) {
       final base = Color.lerp(
         neutral,
-        dark ? const Color(0xFF41473F) : const Color(0xFFDFE4DC),
+        dark ? const Color(0xFF494949) : const Color(0xFFE0E0E0),
         amount * .3,
       )!;
       return Color.alphaBlend(
@@ -30,21 +32,24 @@ abstract final class ZeitlindTheme {
     final generated = ColorScheme.fromSeed(
       seedColor: primary,
       brightness: brightness,
+      dynamicSchemeVariant: neutralAccent
+          ? DynamicSchemeVariant.monochrome
+          : DynamicSchemeVariant.tonalSpot,
     );
     final colors = generated.copyWith(
       surface: surface(.12),
-      onSurface: dark ? const Color(0xFFE6E8E2) : const Color(0xFF252C28),
+      onSurface: dark ? const Color(0xFFEAEAEA) : const Color(0xFF202020),
       onSurfaceVariant: dark
-          ? const Color(0xFFB1B9B0)
-          : const Color(0xFF6E776F),
+          ? const Color(0xFFB8B8B8)
+          : const Color(0xFF707070),
       surfaceContainerLowest: dark
-          ? const Color(0xFF121512)
-          : const Color(0xFFFFFEFC),
+          ? const Color(0xFF101010)
+          : const Color(0xFFFFFFFF),
       surfaceContainerLow: surface(.32),
       surfaceContainer: surface(.5),
       surfaceContainerHigh: surface(.7),
       surfaceContainerHighest: surface(.9),
-      outlineVariant: dark ? const Color(0xFF343C35) : const Color(0xFFE0E4DB),
+      outlineVariant: dark ? const Color(0xFF363636) : const Color(0xFFE2E2E2),
     );
     final base = ThemeData(
       useMaterial3: true,

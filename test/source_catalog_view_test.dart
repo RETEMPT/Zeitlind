@@ -5,6 +5,7 @@ import 'package:zeitlind/features/sources/data/source_catalog_repository.dart';
 import 'package:zeitlind/features/sources/presentation/source_catalog_view.dart';
 import 'package:zeitlind/foundation/appdata.dart';
 import 'package:zeitlind/utils/translations.dart';
+import 'package:zeitlind/features/sources/domain/source_catalog.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -12,6 +13,44 @@ void main() {
     await AppTranslation.init();
     appdata.settings['language'] = 'en-US';
   });
+  testWidgets(
+    'an imported directory opens from the fetched entries without a second request',
+    (tester) async {
+      var requested = false;
+      String? installed;
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: SourceCatalogView(
+              initialAddress: 'https://example.com/index.json',
+              initialEntries: [
+                SourceCatalogEntry(
+                  key: 'sample',
+                  name: 'Imported source',
+                  version: '1',
+                  description: '',
+                  scriptUri: Uri.parse('https://example.com/source.js'),
+                ),
+              ],
+              repository: SourceCatalogRepository((_) async {
+                requested = true;
+                throw StateError('Do not fetch twice');
+              }),
+              onDirectoryLoaded: (_) async {},
+              onInstall: (entry) async => installed = entry.key,
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('Imported source'), findsOneWidget);
+      await tester.tap(find.text('Add'));
+      await tester.pumpAndSettle();
+      expect(installed, 'sample');
+      expect(requested, isFalse);
+      expect(tester.takeException(), isNull);
+    },
+  );
   testWidgets(
     'directory search and self-hosted filter work on a narrow screen',
     (tester) async {

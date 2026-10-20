@@ -4,6 +4,7 @@ import 'package:dio/dio.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:sqlite3/sqlite3.dart';
 import 'package:zeitlind/foundation/log.dart';
+import 'package:zeitlind/foundation/app.dart';
 import 'package:zeitlind/utils/ext.dart';
 
 class CookieJarSql {
@@ -206,7 +207,7 @@ class SingleInstanceCookieJar extends CookieJarSql {
     if (instance != null) {
       return instance!;
     }
-    var dataPath = (await getApplicationSupportDirectory()).path;
+    var dataPath = App.isInitialized ? App.dataPath : (await getApplicationSupportDirectory()).path;
     instance = SingleInstanceCookieJar("$dataPath/cookie.db");
     return instance!;
   }

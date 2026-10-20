@@ -1,11 +1,17 @@
 import 'package:zeitlind/features/sources/data/source_catalog_repository.dart';
 import 'package:zeitlind/features/sources/data/source_transport.dart';
 import 'package:zeitlind/features/sources/domain/source_catalog.dart';
+import 'package:zeitlind/features/sources/domain/source_import.dart';
 import 'package:zeitlind/features/sources/presentation/source_catalog_view.dart';
 import 'package:zeitlind/features/sources/presentation/source_diagnostics_view.dart';
+import 'package:zeitlind/features/sources/presentation/source_import_error.dart';
+import 'package:zeitlind/features/sources/presentation/suwayomi_connect_view.dart';
+import 'package:zeitlind/features/sources/application/starter_source_setup.dart';
+import 'package:zeitlind/features/sources/application/source_registration.dart';
 import 'dart:convert';
 import 'dart:io' as io;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:url_launcher/url_launcher_string.dart';
 import 'package:zeitlind/components/components.dart';
@@ -19,7 +25,8 @@ import 'package:zeitlind/utils/io.dart';
 import 'package:zeitlind/utils/translations.dart';
 
 class ComicSourcePage extends StatelessWidget {
-  const ComicSourcePage({super.key});
+  const ComicSourcePage({super.key, this.initialInput = ''});
+  final String initialInput;
 
   static Future<void> update(
     ComicSource source, [
@@ -56,9 +63,12 @@ class ComicSourcePage extends StatelessWidget {
 
   static Future<int> checkComicSourceUpdate() async {
     if (ComicSource.all().isEmpty) return 0;
-    final entries = await const SourceCatalogRepository(
-      loadSourceText,
-    ).load(appdata.settings['comicSourceListUrl']);
+    final entries = await const SourceCatalogRepository(loadSourceText)
+        .loadMany([
+          appdata.settings['comicSourceListUrl'] as String,
+          ...(appdata.settings['comicSourceRepositories'] as List)
+              .whereType<String>(),
+        ]);
     final updates = <String, String>{};
     for (final entry in entries) {
       final source = ComicSource.find(entry.key);
@@ -72,19 +82,21 @@ class ComicSourcePage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(body: const _Body());
+    return Scaffold(body: _Body(initialInput: initialInput));
   }
 }
 
 class _Body extends StatefulWidget {
-  const _Body();
+  const _Body({this.initialInput = ''});
+  final String initialInput;
 
   @override
   State<_Body> createState() => _BodyState();
 }
 
 class _BodyState extends State<_Body> {
-  var url = "";
+  late final input = TextEditingController(text: widget.initialInput);
+  var query = '';
   bool adding = false;
 
   void updateUI() {
@@ -95,52 +107,78 @@ class _BodyState extends State<_Body> {
   void initState() {
     super.initState();
     ComicSourceManager().addListener(updateUI);
+    starterSourceSetup.addListener(updateUI);
   }
 
   @override
   void dispose() {
-    super.dispose();
     ComicSourceManager().removeListener(updateUI);
+    starterSourceSetup.removeListener(updateUI);
+    input.dispose();
+    super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    return SmoothCustomScrollView(
-      slivers: [
-        SliverAppbar(title: Text('Comic Source'.tl), style: AppbarStyle.shadow),
-        buildCard(context),
-        if (ComicSource.isEmpty)
-          SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.all(24),
-              child: Column(
-                children: [
-                  const Icon(Icons.auto_stories_outlined, size: 48),
-                  const SizedBox(height: 12),
-                  Text(
-                    'No sources installed yet'.tl,
-                    style: Theme.of(context).textTheme.titleMedium,
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'Browse the source directory, or import a JavaScript file.'
-                        .tl,
-                    textAlign: TextAlign.center,
-                  ),
-                ],
+    final sources =
+        ComicSource.all()
+            .where(
+              (source) => '${source.name} ${source.key}'.toLowerCase().contains(
+                query.toLowerCase(),
               ),
+            )
+            .toList()
+          ..sort((a, b) => a.name.compareTo(b.name));
+    return Center(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 1080),
+        child: SmoothCustomScrollView(
+          slivers: [
+            SliverAppbar(
+              title: Text('Comic Source'.tl),
+              style: AppbarStyle.shadow,
             ),
-          ),
-        for (var source in ComicSource.all())
-          _SliverComicSource(
-            key: ValueKey(source.key),
-            source: source,
-            edit: edit,
-            update: update,
-            delete: delete,
-          ),
-        SliverPadding(padding: EdgeInsets.only(bottom: context.padding.bottom)),
-      ],
+            buildCard(context),
+            if (ComicSource.isEmpty)
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: Column(
+                    children: [
+                      const Icon(Icons.auto_stories_outlined, size: 48),
+                      const SizedBox(height: 12),
+                      Text(
+                        'No sources installed yet'.tl,
+                        style: Theme.of(context).textTheme.titleMedium,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            if (!ComicSource.isEmpty)
+              SliverToBoxAdapter(
+                child: TextField(
+                  onChanged: (value) => setState(() => query = value),
+                  decoration: InputDecoration(
+                    hintText: 'Search installed sources'.tl,
+                    prefixIcon: const Icon(Icons.search),
+                  ),
+                ).paddingHorizontal(16).paddingVertical(8),
+              ),
+            for (var source in sources)
+              _SliverComicSource(
+                key: ValueKey(source.key),
+                source: source,
+                edit: edit,
+                update: update,
+                delete: delete,
+              ),
+            SliverPadding(
+              padding: EdgeInsets.only(bottom: context.padding.bottom),
+            ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -163,7 +201,10 @@ class _BodyState extends State<_Body> {
   void edit(ComicSource source) async {
     if (App.isDesktop) {
       try {
-        await Process.run("code", [source.filePath], runInShell: true);
+        final result = await Process.run("code", [
+          source.filePath,
+        ], runInShell: true);
+        if (result.exitCode != 0) throw StateError('Editor is unavailable');
         await showDialog(
           context: App.rootContext,
           builder: (context) => AlertDialog(
@@ -204,92 +245,125 @@ class _BodyState extends State<_Body> {
     return SliverToBoxAdapter(
       child: SizedBox(
         width: double.infinity,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ListTile(
-              title: Text("Add comic source".tl),
-              leading: const Icon(Icons.dashboard_customize),
-            ),
-            TextField(
-              decoration: InputDecoration(
-                hintText: "URL",
-                border: const UnderlineInputBorder(),
-                contentPadding: const EdgeInsets.symmetric(horizontal: 12),
-                suffixIcon: IconButton(
-                  tooltip: "Add comic source".tl,
-                  onPressed: adding ? null : () => handleAddSource(url),
-                  icon: const Icon(Icons.check),
-                ),
-              ),
-              onChanged: (value) {
-                url = value;
-              },
-              onSubmitted: handleAddSource,
-            ).paddingHorizontal(16).paddingBottom(8),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
+        child: Card.outlined(
+          margin: const EdgeInsets.all(16),
+          child: Padding(
+            padding: const EdgeInsets.all(8),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
               children: [
-                FilledButton.tonalIcon(
-                  icon: Icon(Icons.article_outlined),
-                  label: Text("Comic Source list".tl),
-                  onPressed: () {
-                    showPopUpWidget(
-                      App.rootContext,
-                      SourceCatalogView(
-                        onInstall: (entry) async {
-                          final script = await loadSourceText(entry.scriptUri);
-                          await addSource(
-                            script,
-                            entry.scriptUri.pathSegments.last,
-                            expectedKey: entry.key,
-                          );
-                        },
-                      ),
-                    );
-                  },
+                ListTile(
+                  title: Text("Add comic source".tl),
+                  leading: const Icon(Icons.dashboard_customize),
                 ),
-                FilledButton.tonalIcon(
-                  icon: Icon(Icons.file_open_outlined),
-                  label: Text("Use a config file".tl),
-                  onPressed: _selectFile,
-                ),
-                FilledButton.tonalIcon(
-                  icon: Icon(Icons.help_outline),
-                  label: Text("Help".tl),
-                  onPressed: help,
-                ),
-                _CheckUpdatesButton(),
-                FilledButton.tonalIcon(
-                  icon: const Icon(Icons.health_and_safety_outlined),
-                  label: Text('Source self-check'.tl),
-                  onPressed: () => showPopUpWidget(
-                    App.rootContext,
-                    const SourceDiagnosticsView(),
+                TextField(
+                  controller: input,
+                  minLines: 1,
+                  maxLines: 3,
+                  autocorrect: false,
+                  decoration: InputDecoration(
+                    hintText: 'Source or directory URL'.tl,
+                    suffixIcon: IconButton(
+                      tooltip: "Add comic source".tl,
+                      onPressed: adding
+                          ? null
+                          : () => handleAddSource(input.text),
+                      icon: adding
+                          ? const SizedBox.square(
+                              dimension: 18,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Icon(Icons.arrow_forward),
+                    ),
                   ),
-                ),
+                ).paddingHorizontal(16).paddingBottom(8),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    FilledButton.tonalIcon(
+                      icon: Icon(Icons.article_outlined),
+                      label: Text("Comic Source list".tl),
+                      onPressed: () {
+                        openDirectory();
+                      },
+                    ),
+                    FilledButton.tonalIcon(
+                      icon: Icon(Icons.file_open_outlined),
+                      label: Text("Use a config file".tl),
+                      onPressed: adding ? null : _selectFile,
+                    ),
+                    IconButton(
+                      tooltip: 'Paste'.tl,
+                      icon: const Icon(Icons.content_paste),
+                      onPressed: adding
+                          ? null
+                          : () async {
+                              final data = await Clipboard.getData(
+                                Clipboard.kTextPlain,
+                              );
+                              if (mounted && data?.text != null) {
+                                input.text = data!.text!;
+                              }
+                            },
+                    ),
+                    FilledButton.tonalIcon(
+                      icon: const Icon(Icons.hub_outlined),
+                      label: const Text('Suwayomi'),
+                      onPressed: openSuwayomi,
+                    ),
+                    FilledButton.tonalIcon(
+                      icon: Icon(Icons.help_outline),
+                      label: Text("Help".tl),
+                      onPressed: help,
+                    ),
+                    _CheckUpdatesButton(),
+                    IconButton(
+                      tooltip: 'Restore basic sources'.tl,
+                      onPressed: starterSourceSetup.loading
+                          ? null
+                          : () => starterSourceSetup.configure(restore: true),
+                      icon: starterSourceSetup.loading
+                          ? const SizedBox.square(
+                              dimension: 20,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Icon(Icons.restore),
+                    ),
+                    FilledButton.tonalIcon(
+                      icon: const Icon(Icons.health_and_safety_outlined),
+                      label: Text('Source self-check'.tl),
+                      onPressed: () => showPopUpWidget(
+                        App.rootContext,
+                        const SourceDiagnosticsView(),
+                      ),
+                    ),
+                  ],
+                ).paddingHorizontal(12).paddingVertical(8),
+                const SizedBox(height: 8),
               ],
-            ).paddingHorizontal(12).paddingVertical(8),
-            const SizedBox(height: 8),
-          ],
+            ),
+          ),
         ),
       ),
     );
   }
 
   void _selectFile() async {
-    final file = await selectFile(ext: ["js"]);
-    if (file == null) return;
+    final file = await selectFile(ext: ["js", "json", "txt"]);
+    if (file == null || !mounted) return;
+    setState(() => adding = true);
     try {
       var fileName = file.name;
       var bytes = await file.readAsBytes();
-      var content = utf8.decode(bytes);
-      await addSource(content, fileName);
+      var content = decodeSourceBytes(bytes);
+      await importContent(content, fileName);
     } catch (e, s) {
-      App.rootContext.showMessage(message: e.toString());
+      App.rootContext.showMessage(message: sourceImportError(e));
       Log.error("Add comic source", "$e\n$s");
+    } finally {
+      if (mounted) setState(() => adding = false);
     }
   }
 
@@ -299,7 +373,7 @@ class _BodyState extends State<_Body> {
       builder: (context) => AlertDialog(
         title: Text('Comic Source'.tl),
         content: Text(
-          'Browse community sources or connect your own library. Scripts run only after you install them.'
+          'Import Venera JavaScript sources or JSON source directories. Mihon APK extensions and Legado rules use different engines.'
               .tl,
         ),
         actions: [
@@ -319,31 +393,110 @@ class _BodyState extends State<_Body> {
       barrierDismissible: false,
     );
     try {
-      final uri = sourceHttpUri(url);
-      final script = await loadSourceText(uri);
+      Uri? uri;
+      var script = url;
+      if (RegExp(
+        r'^\s*(?:https?://|venera:|zeitlind:|\[[^\]]*\]\(https?://)',
+        caseSensitive: false,
+      ).hasMatch(url)) {
+        uri = sourceImportUri(url);
+        if (uri.path.endsWith('.apk') || uri.path.endsWith('.pb')) {
+          loading.close();
+          openSuwayomi(uri);
+          return;
+        }
+        final response = await fetchSourceText(uri);
+        script = response.content;
+        uri = response.uri;
+      }
       if (cancelled || !mounted) return;
-      final fileName = uri.pathSegments.isEmpty
+      final fileName = uri == null || uri.pathSegments.isEmpty
           ? 'source.js'
           : uri.pathSegments.last;
-      await addSource(script, fileName);
+      final document = SourceImportDocument.parse(script, origin: uri);
+      loading.close();
+      await importDocument(document, fileName);
     } catch (e, s) {
       Log.error('Add comic source', e, s);
-      if (!cancelled && mounted) context.showMessage(message: e.toString());
+      if (!cancelled && mounted) {
+        context.showMessage(message: sourceImportError(e));
+      }
     } finally {
       loading.close();
       if (mounted) setState(() => adding = false);
     }
   }
 
+  Future<void> importContent(String content, String name) async {
+    await importDocument(SourceImportDocument.parse(content), name);
+  }
+
+  Future<void> importDocument(
+    SourceImportDocument document,
+    String name,
+  ) async {
+    if (document.kind == SourceImportKind.mihonRepository) {
+      openSuwayomi(document.origin);
+    } else if (document.kind == SourceImportKind.directory) {
+      openDirectory(document);
+    } else {
+      await addSource(document.content, name);
+      if (mounted) context.showMessage(message: 'Success'.tl);
+    }
+  }
+
+  void openDirectory([SourceImportDocument? document]) {
+    showPopUpWidget(
+      App.rootContext,
+      SourceCatalogView(
+        initialAddress: document?.origin?.toString(),
+        initialEntries: document?.entries,
+        onInstall: (entry) async {
+          final script = await loadSourceText(entry.scriptUri);
+          await addSource(
+            script,
+            entry.scriptUri.pathSegments.last,
+            expectedKey: entry.key,
+            websiteIdentity: entry.websiteIdentity,
+          );
+        },
+      ),
+      maxWidth: 900,
+    );
+  }
+
+  void openSuwayomi([Uri? repositoryUri]) {
+    showPopUpWidget(
+      App.rootContext,
+      SuwayomiConnectView(
+        repositoryUri: repositoryUri,
+        onInstall: (script, key, authorization, websiteIdentity) async {
+          await addSource(
+            script,
+            '$key.js',
+            expectedKey: key,
+            websiteIdentity: websiteIdentity,
+          );
+          final source = ComicSource.find(key)!;
+          source.data['bridgeAuthorization'] = authorization;
+          await source.saveData();
+        },
+      ),
+    );
+  }
+
   Future<void> addSource(
     String js,
     String fileName, {
     String? expectedKey,
+    String? websiteIdentity,
   }) async {
     final source = await ComicSourceManager().install(
       js,
       fileName,
       expectedKey: expectedKey,
+      websiteIdentity: websiteIdentity,
+      replacing: expectedKey == null ? null : ComicSource.find(expectedKey),
     );
     _addAllPagesWithComicSource(source);
     await appdata.saveData();
@@ -400,35 +553,7 @@ void _validatePages() {
 }
 
 void _addAllPagesWithComicSource(ComicSource source) {
-  var explorePages = appdata.settings['explore_pages'];
-  var categoryPages = appdata.settings['categories'];
-  var networkFavorites = appdata.settings['favorites'];
-  var searchPages = appdata.settings['searchSources'];
-
-  if (source.explorePages.isNotEmpty) {
-    for (var page in source.explorePages) {
-      if (!explorePages.contains(page.title)) {
-        explorePages.add(page.title);
-      }
-    }
-  }
-  if (source.categoryData != null &&
-      !categoryPages.contains(source.categoryData!.key)) {
-    categoryPages.add(source.categoryData!.key);
-  }
-  if (source.favoriteData != null &&
-      !networkFavorites.contains(source.favoriteData!.key)) {
-    networkFavorites.add(source.favoriteData!.key);
-  }
-  if (source.searchPageData != null && !searchPages.contains(source.key)) {
-    searchPages.add(source.key);
-  }
-
-  appdata.settings['explore_pages'] = explorePages.toSet().toList();
-  appdata.settings['categories'] = categoryPages.toSet().toList();
-  appdata.settings['favorites'] = networkFavorites.toSet().toList();
-  appdata.settings['searchSources'] = searchPages.toSet().toList();
-
+  registerSourcePages(source);
   appdata.saveData();
 }
 
@@ -591,19 +716,16 @@ class _CallbackSettingState extends State<_CallbackSetting> {
   bool isLoading = false;
 
   Future<void> onClick() async {
-    var func = widget.setting.value['callback'];
-    var result = func([]);
-    if (result is Future) {
-      setState(() {
-        isLoading = true;
-      });
-      try {
-        await result;
-      } finally {
-        setState(() {
-          isLoading = false;
-        });
-      }
+    if (isLoading) return;
+    setState(() => isLoading = true);
+    try {
+      var func = widget.setting.value['callback'];
+      await Future.sync(() => func([]));
+    } catch (e, s) {
+      Log.error('Source callback', e, s);
+      if (mounted) context.showMessage(message: e.toString());
+    } finally {
+      if (mounted) setState(() => isLoading = false);
     }
   }
 
@@ -641,6 +763,7 @@ class _SliverComicSource extends StatefulWidget {
 
 class _SliverComicSourceState extends State<_SliverComicSource> {
   ComicSource get source => widget.source;
+  bool expanded = false;
 
   @override
   Widget build(BuildContext context) {
@@ -648,53 +771,68 @@ class _SliverComicSourceState extends State<_SliverComicSource> {
     bool hasUpdate =
         newVersion != null && compareSemVer(newVersion, source.version);
 
-    return SliverMainAxisGroup(
-      slivers: [
-        SliverPadding(padding: const EdgeInsets.only(top: 16)),
-        SliverToBoxAdapter(
-          child: ListTile(
-            title: Text(source.name, style: ts.s18),
-            subtitle: Text(
-              '${source.version}${hasUpdate ? ' · ${"New Version".tl}' : ''}',
-            ),
-            trailing: PopupMenuButton<String>(
-              tooltip: 'Manage'.tl,
-              onSelected: (action) {
-                switch (action) {
-                  case 'edit':
-                    widget.edit(source);
-                  case 'update':
-                    widget.update(source);
-                  case 'delete':
-                    widget.delete(source);
-                }
-              },
-              itemBuilder: (context) => [
-                PopupMenuItem(value: 'edit', child: Text('Edit'.tl)),
-                PopupMenuItem(value: 'update', child: Text('Update'.tl)),
-                PopupMenuItem(value: 'delete', child: Text('Delete'.tl)),
-              ],
-            ),
-          ),
-        ),
-        SliverToBoxAdapter(
-          child: Container(
-            margin: const EdgeInsets.symmetric(horizontal: 8),
-            decoration: BoxDecoration(
-              border: Border(
-                bottom: BorderSide(
-                  color: context.colorScheme.outlineVariant,
-                  width: 0.6,
+    return SliverToBoxAdapter(
+      child: Card.outlined(
+        margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+        child: Column(
+          children: [
+            ListTile(
+              onTap: () => setState(() => expanded = !expanded),
+              leading: CircleAvatar(
+                backgroundColor: context.colorScheme.surfaceContainerHighest,
+                foregroundColor: context.colorScheme.onSurface,
+                child: Text(
+                  source.name.isEmpty ? 'S' : source.name.characters.first,
                 ),
               ),
+              title: Text(source.name, style: ts.s18),
+              subtitle: Text(
+                '${source.version}${hasUpdate ? ' · ${"New Version".tl}' : ''}',
+              ),
+              trailing: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  IconButton(
+                    tooltip: 'Source settings'.tl,
+                    icon: Icon(
+                      expanded ? Icons.expand_less : Icons.expand_more,
+                    ),
+                    onPressed: () => setState(() => expanded = !expanded),
+                  ),
+                  PopupMenuButton<String>(
+                    tooltip: 'Manage'.tl,
+                    onSelected: (action) {
+                      switch (action) {
+                        case 'edit':
+                          widget.edit(source);
+                        case 'update':
+                          widget.update(source);
+                        case 'delete':
+                          widget.delete(source);
+                      }
+                    },
+                    itemBuilder: (context) => [
+                      PopupMenuItem(value: 'edit', child: Text('Edit'.tl)),
+                      if (source.url.isNotEmpty)
+                        PopupMenuItem(
+                          value: 'update',
+                          child: Text('Update'.tl),
+                        ),
+                      PopupMenuItem(value: 'delete', child: Text('Delete'.tl)),
+                    ],
+                  ),
+                ],
+              ),
             ),
-          ),
+            if (expanded) ...[
+              const Divider(height: 1),
+              ...buildSourceSettings(),
+              ..._buildAccount(),
+              const SizedBox(height: 8),
+            ],
+          ],
         ),
-        SliverToBoxAdapter(
-          child: Column(children: buildSourceSettings().toList()),
-        ),
-        SliverToBoxAdapter(child: Column(children: _buildAccount().toList())),
-      ],
+      ),
     );
   }
 
@@ -709,37 +847,41 @@ class _SliverComicSourceState extends State<_SliverComicSource> {
     }
     for (var item in settingsMap.entries) {
       var key = item.key;
-      String type = item.value['type'];
       try {
+        final type = item.value['type'];
         if (type == "select") {
-          var current = source.data['settings'][key];
-          if (current == null) {
-            var d = item.value['default'];
-            for (var option in item.value['options']) {
-              if (option['value'] == d) {
-                current = option['text'] ?? option['value'];
-                break;
-              }
-            }
-          } else {
-            current =
-                item.value['options'].firstWhere(
-                  (e) => e['value'] == current,
-                )['text'] ??
-                current;
-          }
+          final options = (item.value['options'] as List)
+              .whereType<Map>()
+              .toList();
+          if (options.isEmpty) continue;
+          final value = source.data['settings'][key] ?? item.value['default'];
+          final current = options.indexWhere(
+            (option) => option['value'] == value,
+          );
           yield ListTile(
-            title: Text((item.value['title'] as String).ts(source.key)),
-            trailing: Select(
-              current: (current as String).ts(source.key),
-              values: (item.value['options'] as List)
-                  .map<String>(
-                    (e) => ((e['text'] ?? e['value']) as String).ts(source.key),
-                  )
-                  .toList(),
-              onTap: (i) {
-                source.data['settings'][key] =
-                    item.value['options'][i]['value'];
+            title: Text(
+              (item.value['title']?.toString() ?? key).ts(source.key),
+            ),
+            subtitle: DropdownButton<int>(
+              isExpanded: true,
+              value: current < 0 ? null : current,
+              hint: Text(value?.toString() ?? 'Select'.tl),
+              underline: const SizedBox.shrink(),
+              items: [
+                for (var index = 0; index < options.length; index++)
+                  DropdownMenuItem(
+                    value: index,
+                    child: Text(
+                      (options[index]['text'] ?? options[index]['value'])
+                          .toString()
+                          .ts(source.key),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+              ],
+              onChanged: (i) {
+                if (i == null) return;
+                source.data['settings'][key] = options[i]['value'];
                 source.saveData();
                 setState(() {});
               },
@@ -750,7 +892,7 @@ class _SliverComicSourceState extends State<_SliverComicSource> {
           yield ListTile(
             title: Text((item.value['title'] as String).ts(source.key)),
             trailing: Switch(
-              value: current,
+              value: current == true,
               onChanged: (v) {
                 source.data['settings'][key] = v;
                 source.saveData();
@@ -760,7 +902,8 @@ class _SliverComicSourceState extends State<_SliverComicSource> {
           );
         } else if (type == "input") {
           var current =
-              source.data['settings'][key] ?? item.value['default'] ?? '';
+              (source.data['settings'][key] ?? item.value['default'] ?? '')
+                  .toString();
           yield ListTile(
             title: Text((item.value['title'] as String).ts(source.key)),
             subtitle: Text(
@@ -811,7 +954,7 @@ class _SliverComicSourceState extends State<_SliverComicSource> {
             () => _LoginPage(config: source.account!, source: source),
           );
           source.saveData();
-          setState(() {});
+          if (mounted) setState(() {});
         },
       );
     }
@@ -827,7 +970,9 @@ class _SliverComicSourceState extends State<_SliverComicSource> {
           );
         }
       }
-      if (source.data["account"] is List) {
+      if (source.data["account"] is List &&
+          (source.data["account"] as List).length >= 2 &&
+          source.account?.login != null) {
         bool loading = _reLogin[source.key] == true;
         yield ListTile(
           title: Text("Re-login".tl),
@@ -841,15 +986,17 @@ class _SliverComicSourceState extends State<_SliverComicSource> {
               _reLogin[source.key] = true;
             });
             final List account = source.data["account"];
-            var res = await source.account!.login!(account[0], account[1]);
-            if (res.error) {
-              context.showMessage(message: res.errorMessage!);
-            } else {
-              context.showMessage(message: "Success".tl);
+            try {
+              var res = await source.account!.login!(account[0], account[1]);
+              if (!mounted) return;
+              context.showMessage(
+                message: res.error ? res.errorMessage! : 'Success'.tl,
+              );
+            } catch (e) {
+              if (mounted) context.showMessage(message: e.toString());
+            } finally {
+              if (mounted) setState(() => _reLogin[source.key] = false);
             }
-            setState(() {
-              _reLogin[source.key] = false;
-            });
           },
           trailing: loading
               ? const SizedBox.square(
