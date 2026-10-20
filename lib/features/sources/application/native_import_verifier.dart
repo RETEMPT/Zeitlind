@@ -15,7 +15,9 @@ import '../domain/suwayomi_bridge.dart';
 import '../domain/starter_sources.dart';
 
 /// Runs in a fresh profile. No library, account, or installed user source is read.
-Future<Map<String, dynamic>> verifyNativeSourceImports() async {
+Future<Map<String, dynamic>> verifyNativeSourceImports({
+  Future<void> Function(Map<String, dynamic>)? onProgress,
+}) async {
   await App.init();
   final profile = await Directory.systemTemp.createTemp(
     'zeitlind-native-import-',
@@ -26,9 +28,9 @@ Future<Map<String, dynamic>> verifyNativeSourceImports() async {
   appdata.settings['language'] = 'en-US';
   appdata.settings['proxy'] = 'direct';
   await AppTranslation.init();
-  await Rhttp.init();
-  await JsEngine().ensureInit();
-  await ComicSourceManager().ensureInit();
+  await Rhttp.init().timeout(const Duration(seconds: 30));
+  await JsEngine().init().timeout(const Duration(seconds: 30));
+  await ComicSourceManager().init().timeout(const Duration(seconds: 30));
   final checks = <Map<String, dynamic>>[];
   Future<void> check(String name, Future<void> Function() action) async {
     try {
@@ -37,6 +39,13 @@ Future<Map<String, dynamic>> verifyNativeSourceImports() async {
     } catch (e) {
       checks.add({'name': name, 'passed': false, 'error': e.toString()});
     }
+    await onProgress?.call({
+      'platform': Platform.operatingSystem,
+      'passed': false,
+      'phase': 'running',
+      'profile': profile.path,
+      'checks': checks,
+    });
   }
 
   void require(bool condition, String message) {

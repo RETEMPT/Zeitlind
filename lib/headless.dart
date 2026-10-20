@@ -38,7 +38,11 @@ Future<void> runHeadlessMode(List<String> args) async {
         ? args[commandIndex + 1]
         : 'source-import-verification.json';
     try {
-      final report = await verifyNativeSourceImports();
+      Future<void> saveReport(Map<String, dynamic> report) => File(
+        reportPath,
+      ).writeAsString(const JsonEncoder.withIndent('  ').convert(report));
+      await saveReport({'passed': false, 'phase': 'initializing'});
+      final report = await verifyNativeSourceImports(onProgress: saveReport);
       await File(
         reportPath,
       ).writeAsString(const JsonEncoder.withIndent('  ').convert(report));

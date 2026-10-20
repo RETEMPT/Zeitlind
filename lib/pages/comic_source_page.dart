@@ -308,14 +308,14 @@ class _BodyState extends State<_Body> {
                               }
                             },
                     ),
-                    FilledButton.tonalIcon(
+                    IconButton(
                       icon: const Icon(Icons.hub_outlined),
-                      label: const Text('Suwayomi'),
+                      tooltip: 'Suwayomi',
                       onPressed: openSuwayomi,
                     ),
-                    FilledButton.tonalIcon(
+                    IconButton(
                       icon: Icon(Icons.help_outline),
-                      label: Text("Help".tl),
+                      tooltip: "Help".tl,
                       onPressed: help,
                     ),
                     _CheckUpdatesButton(),
@@ -331,9 +331,9 @@ class _BodyState extends State<_Body> {
                             )
                           : const Icon(Icons.restore),
                     ),
-                    FilledButton.tonalIcon(
+                    IconButton(
                       icon: const Icon(Icons.health_and_safety_outlined),
-                      label: Text('Source self-check'.tl),
+                      tooltip: 'Source self-check'.tl,
                       onPressed: () => showPopUpWidget(
                         App.rootContext,
                         const SourceDiagnosticsView(),
@@ -681,7 +681,7 @@ class _CheckUpdatesButtonState extends State<_CheckUpdatesButton> {
 
   @override
   Widget build(BuildContext context) {
-    return FilledButton.tonalIcon(
+    return IconButton(
       icon: isLoading
           ? SizedBox(
               width: 18,
@@ -689,7 +689,7 @@ class _CheckUpdatesButtonState extends State<_CheckUpdatesButton> {
               child: CircularProgressIndicator(strokeWidth: 2),
             )
           : Icon(Icons.update),
-      label: Text("Check updates".tl),
+      tooltip: "Check updates".tl,
       onPressed: isLoading ? null : check,
     );
   }
