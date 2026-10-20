@@ -31,3 +31,18 @@ String sourceWebsiteIdentity(String key, [String? website]) {
 String? scriptWebsite(String script) => RegExp(
   r'''\b(?:webBase|baseUrl|baseURL|BASE_URL|webUrl)\s*=\s*['"](https?://[^'"]+)['"]''',
 ).firstMatch(script)?.group(1);
+
+String resolveSourceWebsiteIdentity(
+  String key,
+  String script, {
+  String? supplied,
+  String? previous,
+}) {
+  final inferred = sourceWebsiteIdentity(key, scriptWebsite(script));
+  for (final candidate in [supplied, previous, inferred]) {
+    if (candidate != null && candidate.startsWith('site:')) {
+      return candidate;
+    }
+  }
+  return supplied ?? previous ?? inferred;
+}

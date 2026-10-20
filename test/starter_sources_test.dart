@@ -4,8 +4,22 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:zeitlind/features/sources/domain/starter_sources.dart';
 import 'package:zeitlind/features/sources/domain/source_catalog.dart';
 import 'package:zeitlind/features/sources/domain/suwayomi_bridge.dart';
+import 'package:zeitlind/features/sources/domain/source_identity.dart';
 
 void main() {
+  test(
+    'a directory without website metadata still uses the script website for deduplication',
+    () {
+      expect(
+        resolveSourceWebsiteIdentity(
+          'legacy_name',
+          'class Source extends ComicSource { static webBase="https://www.comic.example"; }',
+          supplied: 'key:legacyname',
+        ),
+        'site:comic.example',
+      );
+    },
+  );
   test('Suwayomi variants of the same website are merged', () {
     final result = SuwayomiRemoteSource.parse(
       '[{"id":"1","name":"Site EN","lang":"en","baseUrl":"https://www.comic.example"},{"id":"2","name":"Site ZH","lang":"zh","baseUrl":"https://m.comic.example"}]',

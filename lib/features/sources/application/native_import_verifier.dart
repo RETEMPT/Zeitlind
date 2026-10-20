@@ -142,6 +142,31 @@ Future<Map<String, dynamic>> verifyNativeSourceImports() async {
       'Source update left a stale legacy alias',
     );
   });
+  await check('script-website-overrides-missing-directory-metadata', () async {
+    const script =
+        'class SiteFixture extends ComicSource { name="Site fixture"; key="site_primary"; version="1"; static webBase="https://www.fixture.example"; }';
+    await ComicSourceManager().install(
+      script,
+      'site-primary.js',
+      websiteIdentity: 'key:siteprimary',
+      initialize: false,
+    );
+    var rejected = false;
+    try {
+      await ComicSourceManager().install(
+        script.replaceAll('site_primary', 'site_alternative'),
+        'site-alternative.js',
+        websiteIdentity: 'key:sitealternative',
+        initialize: false,
+      );
+    } on FormatException {
+      rejected = true;
+    }
+    require(
+      rejected && ComicSource.find('site_alternative') == null,
+      'Missing directory metadata allowed a duplicate website',
+    );
+  });
   final mock = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
   final server = Uri.parse('http://127.0.0.1:${mock.port}/');
   final receivedHeaders = <String?>[];

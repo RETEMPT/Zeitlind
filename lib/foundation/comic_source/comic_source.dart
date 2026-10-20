@@ -190,10 +190,12 @@ class ComicSourceManager with ChangeNotifier, Init {
             expectedKey: expectedKey ?? replacing?.key,
             initialize: false,
           );
-          source.data['_zeitlindWebsite'] =
-              websiteIdentity ??
-              source.data['_zeitlindWebsite'] ??
-              sourceWebsiteIdentity(source.key, scriptWebsite(script));
+          source.data['_zeitlindWebsite'] = resolveSourceWebsiteIdentity(
+            source.key,
+            script,
+            supplied: websiteIdentity,
+            previous: source.data['_zeitlindWebsite'] as String?,
+          );
           final existing = findWebsite(source.websiteIdentity);
           if (existing != null && existing.key != source.key) {
             throw const FormatException(
