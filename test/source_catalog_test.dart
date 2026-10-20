@@ -41,6 +41,19 @@ void main() {
       expect(() => parseSourceCatalog(content, uri), throwsFormatException);
     }
   });
+  test('malformed versions fail during directory loading before rendering', () {
+    for (final version in ['', 'unknown', '1.0/invalid', 12]) {
+      expect(
+        () => parseSourceCatalog(
+          jsonEncode([
+            {...entry, 'version': version},
+          ]),
+          uri,
+        ),
+        throwsFormatException,
+      );
+    }
+  });
 
   test('merges duplicates and rejects executable or local URL schemes', () {
     expect(parseSourceCatalog(jsonEncode([entry, entry]), uri).length, 1);

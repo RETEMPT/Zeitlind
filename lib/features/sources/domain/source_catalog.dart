@@ -115,6 +115,9 @@ List<SourceCatalogEntry> parseSourceCatalog(String content, Uri catalogUri) {
         }
 
         final key = requiredString('key');
+        final version = requiredString('version');
+        // Reject malformed metadata before an installed-row version comparison.
+        compareVersions(version, '0.0.0');
         if (!RegExp(r'^[a-zA-Z0-9_]+$').hasMatch(key)) {
           throw FormatException('Invalid source key: $key');
         }
@@ -128,7 +131,7 @@ List<SourceCatalogEntry> parseSourceCatalog(String content, Uri catalogUri) {
         return SourceCatalogEntry(
           key: key,
           name: requiredString('name'),
-          version: requiredString('version'),
+          version: version,
           description: item['description']?.toString() ?? '',
           scriptUri: scriptUri,
           website: (item['domain'] ?? item['website'] ?? item['siteUrl'])
