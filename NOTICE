@@ -1,0 +1,19 @@
+Zeitlind 2.0.0
+Modified on 2026-10-20 for an independent Android-first development fork.
+
+This program is derived from Venera 1.6.3:
+https://github.com/venera-app/venera
+Original work by the Venera contributors, including wgh136 / nyne.
+The GNU General Public License version 3 is provided in LICENSE.
+Existing source and platform copyright notices are retained.
+
+Zeitlind changes include product identity, independent application identifiers,
+source catalog layers, staged source installation, mobile home navigation,
+download manifest validation, reader result handling, tests and documentation.
+This fork is not an official release of the upstream project.
+
+Tag translations use EhTagTranslation/Database:
+https://github.com/EhTagTranslation/Database
+Third-party Flutter dependencies retain their own licenses and notices.
+The community source directory is an external service; its scripts and content
+are supplied by their respective maintainers and are not bundled in this fork.

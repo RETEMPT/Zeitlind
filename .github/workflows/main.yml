@@ -1,0 +1,90 @@
+name: Android release build
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag matching pubspec.yaml
+        required: true
+        default: v2.0.0
+
+permissions:
+  contents: read
+
+concurrency:
+  group: android-release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version-file: pubspec.yaml
+          cache: true
+      - name: Check release version
+        env:
+          REQUESTED_TAG: ${{ inputs.tag }}
+        run: |
+          python3 - <<'PY'
+          import os, pathlib, re
+          version = re.search(r'^version:\s*([^+\s]+)', pathlib.Path('pubspec.yaml').read_text(), re.M).group(1)
+          assert os.environ['REQUESTED_TAG'] == f'v{version}', 'Release tag must match pubspec.yaml'
+          PY
+      - name: Install Android native toolchain
+        run: |
+          rustup show
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-36" "build-tools;36.0.0" "ndk;28.2.13676358"
+      - name: Restore release signing identity
+        env:
+          ZEITLIND_KEYSTORE_BASE64: ${{ secrets.ZEITLIND_KEYSTORE_BASE64 }}
+          ZEITLIND_STORE_PASSWORD: ${{ secrets.ZEITLIND_STORE_PASSWORD }}
+          ZEITLIND_KEY_PASSWORD: ${{ secrets.ZEITLIND_KEY_PASSWORD }}
+        run: |
+          test -n "$ZEITLIND_KEYSTORE_BASE64" && test -n "$ZEITLIND_STORE_PASSWORD" && test -n "$ZEITLIND_KEY_PASSWORD"
+          mkdir -p "$RUNNER_TEMP/zeitlind-signing"
+          printf '%s' "$ZEITLIND_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/zeitlind-signing/zeitlind-release.p12"
+          printf 'storeFile=%s\nstorePassword=%s\nkeyPassword=%s\nkeyAlias=zeitlind\n' \
+            "$RUNNER_TEMP/zeitlind-signing/zeitlind-release.p12" "$ZEITLIND_STORE_PASSWORD" "$ZEITLIND_KEY_PASSWORD" > android/key.properties
+      - run: flutter pub get
+      - run: flutter analyze --fatal-infos
+      - run: flutter test --reporter expanded
+      - name: Build signed release APKs
+        run: |
+          flutter build apk --release \
+            --dart-define=ZEITLIND_REPOSITORY="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}" \
+            --dart-define=ZEITLIND_UPDATE_MANIFEST="https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/main/pubspec.yaml" \
+            --dart-define=ZEITLIND_RELEASES="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/releases/latest"
+      - name: Verify signatures and package identity
+        env:
+          ZEITLIND_STORE_PASSWORD: ${{ secrets.ZEITLIND_STORE_PASSWORD }}
+        run: |
+          mkdir -p dist
+          for apk in build/app/outputs/apk/release/*.apk; do
+            "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose --print-certs "$apk"
+            "$ANDROID_HOME/build-tools/36.0.0/aapt" dump badging "$apk" > "$RUNNER_TEMP/zeitlind-badging.txt"
+            grep -q "package: name='dev.zeitlind.reader'" "$RUNNER_TEMP/zeitlind-badging.txt"
+            cp "$apk" dist/
+          done
+          keytool -exportcert -rfc -keystore "$RUNNER_TEMP/zeitlind-signing/zeitlind-release.p12" \
+            -alias zeitlind -storepass:env ZEITLIND_STORE_PASSWORD -file dist/zeitlind-signing-cert.pem
+          cd dist
+          sha256sum *.apk zeitlind-signing-cert.pem > SHA256SUMS
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Zeitlind-${{ inputs.tag }}-android
+          path: dist/
+          if-no-files-found: error
+          retention-days: 14
+      - name: Remove temporary signing files
+        if: always()
+        run: |
+          rm -f android/key.properties "$RUNNER_TEMP/zeitlind-signing/zeitlind-release.p12"
