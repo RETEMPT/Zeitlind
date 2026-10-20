@@ -28,14 +28,20 @@ jobs:
         run: |
           $report = Join-Path $env:RUNNER_TEMP 'windows-source-import.json'
           $executable = (Resolve-Path 'build/windows/x64/runner/Release/zeitlind.exe').Path
-          $process = Start-Process -FilePath $executable -ArgumentList @('--headless', 'verify-imports', $report) -WindowStyle Hidden -PassThru -Wait
+          $process = Start-Process -FilePath $executable -ArgumentList @('--headless', 'verify-imports', $report) -WindowStyle Hidden -PassThru
+          if (-not $process.WaitForExit(900000)) { Stop-Process -Id $process.Id; throw 'Native import verification timed out' }
           if (-not (Test-Path -LiteralPath $report)) { throw 'Native application exited without an import report' }
           $result = Get-Content -LiteralPath $report -Raw | ConvertFrom-Json
           $result | ConvertTo-Json -Depth 12
           if ($process.ExitCode -ne 0 -or -not $result.passed) { throw 'Native source verification failed' }
       - name: Package Windows portable build
+        if: success() || failure()
         shell: pwsh
         run: |
+          if (-not (Test-Path 'build/windows/x64/runner/Release/zeitlind.exe')) { exit 0 }
+          foreach ($dll in @('msvcp140.dll', 'vcruntime140.dll', 'vcruntime140_1.dll')) {
+            if (-not (Test-Path "build/windows/x64/runner/Release/$dll")) { throw "Missing portable runtime: $dll" }
+          }
           New-Item -ItemType Directory -Path dist -Force | Out-Null
           $version = (Select-String -Path pubspec.yaml -Pattern '^version:\s*([^+]+)').Matches.Groups[1].Value.Trim()
           $archive = "zeitlind-$version-windows-x64.zip"
@@ -43,11 +49,12 @@ jobs:
           $digest = (Get-FileHash "dist/$archive" -Algorithm SHA256).Hash.ToLowerInvariant()
           "$digest  $archive" | Set-Content 'dist/SHA256SUMS-windows' -Encoding ascii
       - uses: actions/upload-artifact@v4
+        if: always()
         with:
           name: Zeitlind-windows-x64
           path: dist/
           retention-days: 14
-          if-no-files-found: error
+          if-no-files-found: warn
       - uses: actions/upload-artifact@v4
         if: always()
         with:
