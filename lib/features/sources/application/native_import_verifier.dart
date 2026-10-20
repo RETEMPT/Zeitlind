@@ -129,6 +129,18 @@ Future<Map<String, dynamic>> verifyNativeSourceImports() async {
               previous.key,
       'Legacy library identities were lost',
     );
+    final canonical = ComicSource.find(previous.key)!;
+    await ComicSourceManager().install(
+      fixture.replaceAll('1.0.0', '1.0.1'),
+      canonical.filePath,
+      replacing: canonical,
+      initialize: false,
+    );
+    require(
+      JsEngine().runCode('ComicSource.sources.legacy_fixture.version') ==
+          '1.0.1',
+      'Source update left a stale legacy alias',
+    );
   });
   final mock = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
   final server = Uri.parse('http://127.0.0.1:${mock.port}/');

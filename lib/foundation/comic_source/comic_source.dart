@@ -205,6 +205,13 @@ class ComicSourceManager with ChangeNotifier, Init {
       );
       if (replacing != null) _sources.remove(replacing);
       _sources.add(source);
+      for (final alias in _aliases.entries.where(
+        (entry) => entry.value == source.key,
+      )) {
+        JsEngine().runCode(
+          'ComicSource.sources[${jsonEncode(alias.key)}] = ComicSource.sources[${jsonEncode(source.key)}];',
+        );
+      }
       try {
         await source.saveData();
       } catch (e, s) {
