@@ -19,4 +19,5 @@ jobs:
       - run: flutter pub get
       - run: flutter analyze --fatal-infos
       - run: flutter test
+      - run: node --test test/source_runtime_compatibility.test.cjs
       - run: flutter build bundle --debug --no-pub

@@ -1156,7 +1156,7 @@ class ComicSource {
     /**
      * load a setting with its key
      * @param key {string}
-     * @returns {any}
+     * @returns {any} Saved value, declared default, or null for an absent setting.
      */
     loadSetting(key) {
         return sendMessage({
@@ -1217,6 +1217,33 @@ class ComicSource {
     }
 
     init() { }
+
+    // Apply to every parsed instance, including installed sources on restart.
+    // Keep upstream files intact so their checksums and updates remain valid.
+    static applyCompatibilityFixes(source) {
+        const init = typeof source.init === 'function' ? source.init.toString() : '';
+        if (source.key === 'comic_walker' &&
+            /\bresponse\s*=\s*JSON\.parse\(resp\.body\)/.test(init) &&
+            /this\.latestVersion\s*=\s*response\.version/.test(init)) {
+            source.init = async function () {
+                // Version discovery is optional; token creation must still run.
+                try {
+                    const resp = await Network.get(
+                        'https://itunes.apple.com/lookup?bundleId=jp.co.bookwalker.cwapp.ios&country=jp'
+                    );
+                    if (resp.status === 200) {
+                        const response = JSON.parse(resp.body);
+                        const version = response.results?.[0]?.version;
+                        if (typeof version === 'string' && version.trim()) {
+                            this.latestVersion = version;
+                        }
+                    }
+                } catch (_) { }
+                await this.refreshToken();
+            };
+        }
+        return source;
+    }
 
     static sources = {}
 }

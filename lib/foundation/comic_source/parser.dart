@@ -34,7 +34,7 @@ class ComicSourceParser {
     js = script.content;
     final className = script.className;
     JsEngine().runCode("""(() => { $js
-        this['temp'] = new $className()
+        this['temp'] = ComicSource.applyCompatibilityFixes(new $className())
       }).call()
     """, className);
     _name =

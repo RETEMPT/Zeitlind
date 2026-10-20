@@ -79,6 +79,28 @@ Future<Map<String, dynamic>> verifyNativeSourceImports({
       'Reload lost the saved setting',
     );
   });
+  await check('optional-settings-do-not-require-an-account', () async {
+    final source = ComicSource.find('zeitlind_import_fixture')!;
+    source.data['settings'] = {'number': 0, 'enabled': false, 'address': ''};
+    final values = JsEngine().runCode('''(() => {
+      const source = ComicSource.sources.zeitlind_import_fixture;
+      return [source.loadSetting('number'), source.loadSetting('enabled'),
+        source.loadSetting('address'), source.loadSetting('default_username'),
+        source.loadSetting('default_password')];
+    })()''');
+    require(
+      jsonEncode(values) == '[0,false,"",null,null]',
+      'Optional settings failed or saved empty values were replaced',
+    );
+    source.data.remove('settings');
+    require(
+      JsEngine().runCode(
+            'ComicSource.sources.zeitlind_import_fixture.loadSetting("number")',
+          ) ==
+          1,
+      'Declared defaults are no longer available',
+    );
+  });
   await check('failed-update-keeps-old-file-and-runtime', () async {
     final previous = ComicSource.find('zeitlind_import_fixture')!;
     final original = await File(previous.filePath).readAsString();

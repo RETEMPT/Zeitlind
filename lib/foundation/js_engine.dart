@@ -165,10 +165,11 @@ class JsEngine with _JSEngineApi, JsUiApi, Init {
           case "load_setting":
             String key = message["key"];
             String settingKey = message["setting_key"];
-            var source = ComicSource.find(key)!;
+            var source = ComicSource.find(key) ??
+                (throw StateError('Source not found: $key'));
+            // Sources may probe optional settings that have no declaration.
             return source.data["settings"]?[settingKey] ??
-                source.settings?[settingKey]!['default'] ??
-                (throw "Setting not found: $settingKey");
+                source.settings?[settingKey]?['default'];
           case "isLogged":
             return ComicSource.find(message["key"])!.isLogged;
           // temporary solution for [setTimeout] function
