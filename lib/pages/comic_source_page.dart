@@ -320,7 +320,7 @@ class _BodyState extends State<_Body> {
                     ),
                     _CheckUpdatesButton(),
                     IconButton(
-                      tooltip: 'Restore basic sources'.tl,
+                      tooltip: 'Restore default sources'.tl,
                       onPressed: starterSourceSetup.loading
                           ? null
                           : () => starterSourceSetup.configure(restore: true),

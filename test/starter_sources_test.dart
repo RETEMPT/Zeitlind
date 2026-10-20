@@ -7,6 +7,24 @@ import 'package:zeitlind/features/sources/domain/suwayomi_bridge.dart';
 import 'package:zeitlind/features/sources/domain/source_identity.dart';
 
 void main() {
+  test('all 31 native defaults use verified immutable snapshot URLs', () {
+    expect(starterSources, hasLength(31));
+    expect(starterSources.map((s) => s.key).toSet(), hasLength(31));
+    for (final source in starterSources) {
+      expect(source.sha256, matches(RegExp(r'^[a-f0-9]{64}$')));
+      expect(source.uri.host, 'git.nyne.dev');
+      expect(source.uri.path, contains('/raw/commit/$nativeStarterRevision/'));
+      expect(source.uri.pathSegments.last, source.fileName);
+    }
+    expect(
+      starterSources.firstWhere((s) => s.key == 'Komiic').fileName,
+      'komiic.js',
+    );
+    expect(
+      starterSources.firstWhere((s) => s.key == 'ManHuaGui').fileName,
+      'manhuagui.js',
+    );
+  });
   test(
     'a directory without website metadata still uses the script website for deduplication',
     () {
@@ -31,6 +49,74 @@ void main() {
     'demo',
     'Demo',
     sha256.convert(utf8.encode(script)).toString(),
+  );
+  test(
+    'each success is checkpointed and a failed source resumes alone',
+    () async {
+      final second = StarterSource('second', 'Second', spec.sha256);
+      final downloads = <String>[];
+      final installed = <String>{};
+      var saved = <String>{};
+      var failSecond = true;
+      final installer = StarterSourceInstaller((uri) async {
+        downloads.add(uri.pathSegments.last);
+        if (failSecond && uri.pathSegments.last == 'second.js') {
+          throw StateError('Network interrupted');
+        }
+        return script;
+      });
+      Future<StarterSourceResult> run() => installer.run(
+        sources: [spec, second],
+        completed: saved,
+        isInstalled: (source) => installed.contains(source.key),
+        install: (source, _) async => installed.add(source.key),
+        onProgress: (keys) async => saved = keys.toSet(),
+      );
+      final partial = await run();
+      expect(saved, {'demo'});
+      expect(partial.errors.keys, ['second']);
+      failSecond = false;
+      final resumed = await run();
+      expect(saved, {'demo', 'second'});
+      expect(resumed.errors, isEmpty);
+      expect(downloads, ['demo.js', 'second.js', 'second.js']);
+    },
+  );
+  test(
+    'failed checkpoint remains retryable without reinstalling the source',
+    () async {
+      var installed = false;
+      var downloads = 0;
+      var installs = 0;
+      final installer = StarterSourceInstaller((_) async {
+        downloads++;
+        return script;
+      });
+      final partial = await installer.run(
+        sources: [spec],
+        isInstalled: (_) => installed,
+        install: (_, _) async {
+          installed = true;
+          installs++;
+        },
+        onProgress: (_) async => throw StateError('Storage unavailable'),
+      );
+      expect(partial.completed, isEmpty);
+      expect(partial.errors.keys, ['demo']);
+      Set<String>? checkpoint;
+      final resumed = await installer.run(
+        sources: [spec],
+        completed: partial.completed,
+        isInstalled: (_) => installed,
+        install: (_, _) async => fail('Must not install twice'),
+        onProgress: (keys) async => checkpoint = keys,
+      );
+      expect(resumed.completed, {'demo'});
+      expect(checkpoint, {'demo'});
+      expect(resumed.errors, isEmpty);
+      expect(downloads, 1);
+      expect(installs, 1);
+    },
   );
   test(
     'basic source setup installs and remembers the verified snapshot',

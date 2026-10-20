@@ -20,6 +20,7 @@ import 'package:zeitlind/utils/opencc.dart';
 import 'package:zeitlind/utils/tags_translation.dart';
 import 'package:zeitlind/utils/translations.dart';
 import 'foundation/appdata.dart';
+import 'features/sources/domain/source_preferences.dart';
 
 extension _FutureInit<T> on Future<T> {
   /// Prevent unhandled exception
@@ -53,7 +54,7 @@ Future<void> init() async {
     Log.error("init", "$e\n$s");
   }
   CacheManager().setLimitSize(appdata.settings['cacheSize']);
-  _checkOldConfigs();
+  await _checkOldConfigs();
   if (App.isAndroid) {
     handleLinks();
     handleTextShare();
@@ -76,7 +77,7 @@ Future<void> init() async {
   }
 }
 
-void _checkOldConfigs() {
+Future<void> _checkOldConfigs() async {
   if (appdata.implicitData['neutralPaletteMigration'] != true) {
     if (appdata.settings['color'] == 'green' &&
         appdata.settings['customThemeHue'] == 150.0 &&
@@ -108,13 +109,20 @@ void _checkOldConfigs() {
     appdata.writeImplicitData();
   }
 
-  if (appdata.settings['comicSourceListUrl'].toString().contains(
-    "git.nyne.dev",
-  )) {
-    // migrate to jsdelivr cdn
-    appdata.settings['comicSourceListUrl'] =
-        "https://cdn.jsdelivr.net/gh/venera-app/venera-configs@main/index.json";
-    appdata.saveData();
+  if (appdata.implicitData['nativeSourceDirectoryMigration'] != true) {
+    final preferences = SourceDirectoryPreferences.migrate(
+      appdata.settings['comicSourceListUrl'],
+      appdata.settings['comicSourceRepositories'],
+    );
+    appdata.settings['comicSourceListUrl'] = preferences.selected;
+    appdata.settings['comicSourceRepositories'] = preferences.repositories;
+    try {
+      await appdata.saveData();
+      appdata.implicitData['nativeSourceDirectoryMigration'] = true;
+      await appdata.writeImplicitData();
+    } catch (e, s) {
+      Log.error('Source directory migration', e, s);
+    }
   }
 }
 

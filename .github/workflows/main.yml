@@ -6,7 +6,7 @@ on:
       tag:
         description: Release tag matching pubspec.yaml
         required: true
-        default: v2.1.0
+        default: v2.1.1
 
 permissions:
   contents: read

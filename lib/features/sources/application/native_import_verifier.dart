@@ -32,9 +32,13 @@ Future<Map<String, dynamic>> verifyNativeSourceImports({
   await JsEngine().init().timeout(const Duration(seconds: 30));
   await ComicSourceManager().init().timeout(const Duration(seconds: 30));
   final checks = <Map<String, dynamic>>[];
-  Future<void> check(String name, Future<void> Function() action) async {
+  Future<void> check(
+    String name,
+    Future<void> Function() action, {
+    Duration timeout = const Duration(seconds: 65),
+  }) async {
     try {
-      await action().timeout(const Duration(seconds: 65));
+      await action().timeout(timeout);
       checks.add({'name': name, 'passed': true});
     } catch (e) {
       checks.add({'name': name, 'passed': false, 'error': e.toString()});
@@ -275,7 +279,7 @@ Future<Map<String, dynamic>> verifyNativeSourceImports({
   }
 
   if (Platform.environment['ZEITLIND_VERIFY_LIVE'] != '0') {
-    await check('audited-basic-sources-bootstrap', () async {
+    await check('audited-native-sources-bootstrap', () async {
       final result = await const StarterSourceInstaller(loadSourceText).run(
         isInstalled: (spec) => ComicSource.find(spec.key) != null,
         install: (spec, script) async {
@@ -292,10 +296,11 @@ Future<Map<String, dynamic>> verifyNativeSourceImports({
             result.completed.length == starterSources.length,
         'Basic source setup failed: ${result.errors}',
       );
-    });
+    }, timeout: const Duration(minutes: 5));
     for (final directory in [
+      SourceCatalogPresets.native,
       SourceCatalogPresets.direct,
-      'https://cdn.jsdelivr.net/gh/kuiti/manga-source-index@main/05-venera-sources/tier1/index.json',
+      SourceCatalogPresets.integrated,
     ]) {
       var entries = <SourceCatalogEntry>[];
       await check('directory:$directory', () async {

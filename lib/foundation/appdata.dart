@@ -7,6 +7,7 @@ import 'package:zeitlind/foundation/log.dart';
 import 'package:zeitlind/utils/data_sync.dart';
 import 'package:zeitlind/utils/init.dart';
 import 'package:zeitlind/utils/io.dart';
+import 'package:zeitlind/features/sources/domain/source_catalog.dart';
 
 class Appdata with Init {
   Appdata._create();
@@ -220,11 +221,7 @@ class Settings with ChangeNotifier {
     'sni': true,
     'autoAddLanguageFilter': 'none', // none, chinese, english, japanese
     'comicSourceListUrl': _defaultSourceListUrl,
-    'comicSourceRepositories': <String>[
-      'https://cdn.jsdelivr.net/gh/venera-app/venera-configs@main/index.json',
-      'https://cdn.jsdelivr.net/gh/kuiti/manga-source-index@main/05-venera-sources/tier1/index.json',
-      'https://cdn.jsdelivr.net/gh/kuiti/manga-source-index@main/05-venera-sources/all/index.json',
-    ],
+    'comicSourceRepositories': <String>[...SourceCatalogPresets.defaults],
     'preloadImageCount': 4,
     'followUpdatesFolder': null,
     'initialPage': '0',
@@ -374,5 +371,4 @@ async function processImage(image, cid, eid, page, sourceKey) {
 }
 ''';
 
-const _defaultSourceListUrl =
-    "https://cdn.jsdelivr.net/gh/venera-app/venera-configs@main/index.json";
+const _defaultSourceListUrl = SourceCatalogPresets.native;

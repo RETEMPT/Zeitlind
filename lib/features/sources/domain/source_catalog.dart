@@ -170,8 +170,21 @@ List<SourceCatalogEntry> deduplicateSourceCatalog(
 }
 
 abstract final class SourceCatalogPresets {
+  static const native =
+      'https://git.nyne.dev/nyne/venera-configs/raw/branch/main/index.json';
   static const community =
       'https://cdn.jsdelivr.net/gh/venera-app/venera-configs@main/index.json';
   static const direct =
       'https://raw.githubusercontent.com/venera-app/venera-configs/main/index.json';
+  static const integrated =
+      'https://cdn.jsdelivr.net/gh/kuiti/manga-source-index@main/05-venera-sources/tier1/index.json';
+  static const integratedAll =
+      'https://cdn.jsdelivr.net/gh/kuiti/manga-source-index@main/05-venera-sources/all/index.json';
+  static const defaults = [
+    native,
+    community,
+    direct,
+    integrated,
+    integratedAll,
+  ];
 }

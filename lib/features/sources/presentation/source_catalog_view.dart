@@ -163,9 +163,9 @@ class _SourceCatalogViewState extends State<SourceCatalogView> {
                 spacing: 8,
                 children: [
                   ActionChip(
-                    label: Text('Community CDN'.tl),
+                    label: Text('Venera native'.tl),
                     onPressed: () {
-                      address.text = SourceCatalogPresets.community;
+                      address.text = SourceCatalogPresets.native;
                       load();
                     },
                   ),

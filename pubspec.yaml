@@ -2,7 +2,7 @@ name: zeitlind
 description: "Zeitlind — your library, your pace."
 publish_to: 'none'
 
-version: 2.1.0+210
+version: 2.1.1+211
 
 environment:
   sdk: '>=3.8.0 <4.0.0'

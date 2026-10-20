@@ -31,18 +31,33 @@ class StarterSourceSetup extends ChangeNotifier {
           : <String>{};
       final result = await const StarterSourceInstaller(loadSourceText).run(
         completed: completed,
-        isInstalled: (spec) =>
-            ComicSource.find(spec.key) != null ||
-            ComicSourceManager().findWebsite(sourceWebsiteIdentity(spec.key)) !=
-                null,
+        isInstalled: (spec) {
+          final source =
+              ComicSource.find(spec.key) ??
+              ComicSourceManager().findWebsite(sourceWebsiteIdentity(spec.key));
+          if (source == null) return false;
+          registerSourcePages(source);
+          return true;
+        },
         install: (spec, script) async {
+          final existing = ComicSourceManager().findWebsite(
+            resolveSourceWebsiteIdentity(spec.key, script),
+          );
+          if (existing != null) {
+            registerSourcePages(existing);
+            return;
+          }
           final source = await ComicSourceManager().install(
             script,
             '${spec.key}.js',
             expectedKey: spec.key,
           );
           registerSourcePages(source);
-          await appdata.saveData();
+        },
+        onProgress: (completedKeys) async {
+          await appdata.saveData(false);
+          appdata.implicitData['starterSourceKeys'] = completedKeys.toList();
+          await appdata.writeImplicitData();
           App.forceRebuild();
         },
       );
@@ -50,10 +65,10 @@ class StarterSourceSetup extends ChangeNotifier {
       appdata.implicitData['starterSourceKeys'] = result.completed.toList();
       await appdata.writeImplicitData();
       for (final error in errors.entries) {
-        Log.error('Basic source ${error.key}', error.value);
+        Log.error('Default source ${error.key}', error.value);
       }
     } catch (e, s) {
-      Log.error('Basic sources', e, s);
+      Log.error('Default sources', e, s);
     }
   }
 }

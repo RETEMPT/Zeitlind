@@ -514,7 +514,9 @@
     "Local or bridged source has no remote script update URL": "本地源或桥接源没有远程脚本更新地址",
     "Restore basic sources": "恢复基础源",
     "A source for this website is already installed": "已安装同一网站的漫画源，请使用现有配置",
-    "The basic source checksum does not match the audited version": "基础源校验失败，请稍后重试"
+    "The basic source checksum does not match the audited version": "基础源校验失败，请稍后重试",
+    "Venera native": "Venera 原生",
+    "Restore default sources": "恢复默认漫画源"
   },
   "zh_TW": {
     "Home": "首頁",
@@ -1031,6 +1033,8 @@
     "Local or bridged source has no remote script update URL": "本地源或桥接源没有远程脚本更新地址",
     "Restore basic sources": "恢复基础源",
     "A source for this website is already installed": "已安装同一网站的漫画源，请使用现有配置",
-    "The basic source checksum does not match the audited version": "基础源校验失败，请稍后重试"
+    "The basic source checksum does not match the audited version": "基础源校验失败，请稍后重试",
+    "Venera native": "Venera 原生",
+    "Restore default sources": "恢復預設漫畫源"
   }
 }
